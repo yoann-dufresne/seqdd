@@ -1,9 +1,10 @@
 from seqdd.utils.scheduler import Job
 from shutil import rmtree
-from os import path, listdir, rename
-import subprocess
+from os import path, listdir, rename, remove
+from os import makedirs
 from sys import stderr
 import platform
+import subprocess
 import time
 
 from seqdd.utils.scheduler import JobManager, CmdLineJob, FunctionJob
@@ -28,6 +29,9 @@ class DownloadManager:
     def download_to(self, datadir):
         manager = JobManager(max_process=1)
         manager.start()
+
+        # Creates the data directory if not existing
+        makedirs(datadir, exist_ok=True)
 
         # --- ncbi genomes ---
         ncbi_reg = self.register.subregisters['ncbi']
@@ -121,11 +125,11 @@ def download_datasets_software(dest_dir):
         return None
 
     # Download datasets
+    print('Download the ncbi datasets cli binnary...')
     cmd = f'wget {download_link} --directory-prefix={path.abspath(dest_dir)}'
     ret = subprocess.run(cmd.split())
 
     if ret.returncode == 0:
-        print('Download the ncbi datasets cli binnary...')
         binpath = path.join(dest_dir, 'datasets')
 
         ret = subprocess.run(f'chmod +x {binpath}'.split())
@@ -152,18 +156,22 @@ def ncbi_jobs_from_accessions(accessions, dest_dir, datasets_bin):
     
     # Unzip Job
     unzip_dir = path.join(dest_dir, job_name)
-    unzip_job = CmdLineJob(f"unzip {download_file} -d {job_name}", parents=[download_job])
+    unzip_job = CmdLineJob(f"unzip {download_file} -d {unzip_dir}", parents=[download_job])
 
     # Data download
     rehydrate_job = CmdLineJob(f"{datasets_bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job])
 
     # Data reorganization
-    reorg_job = FunctionJob(ncbi_clean, func_args=(unzip_dir, dest_dir), parents=[rehydrate_job])
+    reorg_job = FunctionJob(ncbi_clean, func_args=(download_file, unzip_dir, dest_dir), parents=[rehydrate_job])
 
     return download_job, unzip_job, rehydrate_job, reorg_job
 
 
-def ncbi_clean(unzip_dir, dest_dir):
+def ncbi_clean(archive, unzip_dir, dest_dir):
+    # Remove the downloaded archive
+    remove(archive)
+
+    # Remove subdirectories while moving their content
     data_dir = path.join(unzip_dir, "ncbi_dataset", "data")
 
     # Enumerated the downloaded files
@@ -184,3 +192,54 @@ def ncbi_clean(unzip_dir, dest_dir):
 
 
 # # -------------------- SRA downloads --------------------
+
+
+def download_sra_toolkit(dest_dir, version='3.1.1'):
+    download_link = ''
+    dirname = ''
+    supported = True
+
+    system = platform.system()
+    if system == 'Linux':
+        download_link = f'https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/{version}/sratoolkit.{version}-ubuntu64.tar.gz'
+        dirname = f'sratoolkit.{version}-ubuntu64'
+    elif system == 'Windows':
+        print('Windows plateforms are not supported by seqdd.', file=stderr)
+        exit(3)
+    else:
+        supported = False
+
+    # Message to potential system extensions
+    if not supported:
+        print('sratoolkit auto-install is not yet supported on your system. Plese install the toolkit by yourself. Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:', file=stderr)
+        print(f'system={system}\tplateform={platform.machine()}', file=stderr)
+        return None
+
+    # Download sra toolkit
+    cmd = f'wget {download_link} --directory-prefix={path.abspath(dest_dir)}'
+    ret = subprocess.run(cmd.split())
+
+    if ret.returncode != 0:
+        print('Impossible to automatically download sratoolkit. Please install it by yourself.', file=stderr)
+        return None
+
+    # Uncompress the archive
+    cmd = f'tar -xzf {dirname}.tar.gz'
+    ret = subprocess.run(cmd.split())
+
+    if ret.returncode != 0:
+        print('Impossible to expand the sratoolkit tar.gz on your system. Please install the toolkit yourself.', file=stderr)
+        return None
+
+    # Create links to the bins
+    prefetch_bin = path.join(dest_dir, dirname, 'bin', 'prefetch')
+    cmd = f'ln -s {prefetch_bin} {path.join(dest_dir, 'prefetch')}'
+    ret = subprocess.run(cmd.split())
+    # TODO: msg
+
+    fasterqdump_bin = path.join(dest_dir, dirname, 'bin', 'fasterq-dump')
+    cmd = f'ln -s {prefetch_bin} {path.join(dest_dir, 'fasterq-dump')}'
+    ret = subprocess.run(cmd.split())
+    # TODO: msg
+
+    return None

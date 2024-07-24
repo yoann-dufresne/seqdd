@@ -109,6 +109,12 @@ class Job:
     def is_ready(self):
         return all(x.is_over in self.parents)
 
+    def start(self):
+        print(f'START {self}')
+
+    def stop(self):
+        print(f'STOP {self}')
+
     def get_returncode(self):
         raise NotImplementedError()
 
@@ -124,7 +130,7 @@ class FunctionJob(Job):
         self.process = Process(target=func_to_run, args=func_args)
 
     def start(self):
-        print('START fun run:', self.func_to_run.__name__, args)
+        super().start()
         self.process.start()
 
 
@@ -138,6 +144,12 @@ class FunctionJob(Job):
             self.process.join(timeout=5)
         if self.process.is_alive():
             self.process.terminate()
+        super().stop()
+
+    def get_returncode(self):
+        if self.process is None:
+            return None
+        return self.process.exitcode
 
     def join(self):
         self.process.join()
@@ -149,6 +161,9 @@ class FunctionJob(Job):
             self.process.join()
         return alive
 
+    def __repr__(self):
+        return f'FunctionJob [ {self.to_run.__name__} {self.args} ]'
+
 
 class CmdLineJob(Job):
 
@@ -157,7 +172,7 @@ class CmdLineJob(Job):
         self.cmd = command_line
 
     def start(self):
-        print('START cmd run:', self.cmd)
+        super().start()
         self.process = subprocess.Popen(self.cmd.split(' '))
 
     def stop(self):
@@ -169,6 +184,7 @@ class CmdLineJob(Job):
         self.process.communicate(timeout=5)
         if self.process.returncode is None:
             self.process.terminate()
+        super().stop()
 
     def is_alive(self):
         alive = self.process.poll() is None
@@ -186,4 +202,7 @@ class CmdLineJob(Job):
 
     def join(self):
         self.process.communicate()
+
+    def __repr__(self):
+        return f'CmdLineJob [ {self.cmd} ]'
         
