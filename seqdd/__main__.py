@@ -1,6 +1,9 @@
 import argparse
 from os import path
-from seqdd.utils.reg_manager import load_source, save_source, create_register
+from sys import stderr
+
+from seqdd.utils.reg_manager import load_source, save_source, create_register, Register
+from seqdd.utils.download import DownloadManager
 
 
 def parse_cmd():
@@ -23,6 +26,7 @@ def parse_cmd():
 
     # Download entries from the register
     download = subparsers.add_parser('download', help='Download data from the register. The download process needs sra-tools, ncbi command-line tools and wget.')
+    download.add_argument('-d', '--download-directory', default='data', help='Directory where all the data will be downloaded')
 
     args = parser.parse_args()
     return args
@@ -31,7 +35,7 @@ def parse_cmd():
 def on_init(args):
     print('Init register')
     location = args.register_location
-    create_registry(location, force=args.force)
+    create_register(location, force=args.force)
 
 
 def on_add(args):
@@ -53,9 +57,23 @@ def on_add(args):
         save_source(src_path, accessions)
 
 
+def on_download(args):
+    reg = Register(dirpath=args.register_location)
+    print(reg)
+    dm = DownloadManager(reg, path.join(args.register_location, 'bin'))
+    dm.download_to(args.download_directory)
+
+
 if __name__ == "__main__":
     args = parse_cmd()
-    print(args)
+    # print(args)
 
+    # Verify the existance of the data register
+    if args.cmd != 'init':
+        if not path.isdir(args.register_location):
+            print('No data register found. Please first run the init command.', file=stderr)
+            exit(1)
+
+    # Apply the right command
     cmd_to_apply = locals()[f"on_{args.cmd}"]
     cmd_to_apply(args)
