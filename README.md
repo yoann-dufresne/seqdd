@@ -13,6 +13,7 @@ Global command line:
 ## From a register directory
 
 If a register directory containing all needed dataset is present in your project (usually a .register folder), you can use it to ask SedDD to download everything for you.
+If not specified, the dataset will be downloaded to a data directory next to the register.
 
 # Construct your own sequence data register
 
