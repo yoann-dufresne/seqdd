@@ -173,7 +173,7 @@ class CmdLineJob(Job):
 
     def start(self):
         super().start()
-        self.process = subprocess.Popen(self.cmd.split(' '))
+        self.process = subprocess.Popen(self.cmd, shell=True)
 
     def stop(self):
         self.is_over = True

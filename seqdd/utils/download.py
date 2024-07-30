@@ -17,7 +17,6 @@ class DownloadManager:
     def __init__(self, register, bindir='bin'):
         self.register = register
         ncbi, sra, wget = self.get_downloaders(bindir)
-        print(ncbi)
 
     def get_downloaders(self, bindir):
         self.ncbi = self.sra = wget = None
@@ -107,8 +106,6 @@ def check_binaries(binary_names, bindir, download_function):
     binpaths = download_function(bindir)
     if binpaths is None:
         return None
-
-    print(binpaths)
 
     for name, local_bin in binpaths.items():
     # Exec locally installed binary
@@ -225,30 +222,30 @@ def sra_jobs_from_accessions(accessions, datadir, binaries):
     # Each dataset download is independant
     for acc in accessions:
         # Prefetch data
-        cmd = f'{binaries["prefetch"]} --max-size u --output-directory {datadir} {acc}'
+        cmd = f'./{binaries["prefetch"]} --max-size u --output-directory {datadir} {acc}'
         prefetch_job = CmdLineJob(cmd)
 
         # Split files
         accession_dir = path.join(datadir, acc)
-        cmd = f'{binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {datadir} {accession_dir}'
+        cmd = f'{binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
         fasterqdump_job = CmdLineJob(cmd, parents=[prefetch_job])
         
         # Compress files
-        cmd = f'gzip {path.join(datadir, acc, "*.fastq")}'
+        cmd = f'gzip {path.join(accession_dir, "*.fastq")}'
         compress_job = CmdLineJob(cmd, parents=[fasterqdump_job])
 
         # Move to datadir and clean
         clean_job = FunctionJob(sra_move_and_clean, func_args=(accession_dir, datadir), parents=[compress_job])
 
         # Set the jobs
-        jobs.extends((prefetch_job, fasterqdump_job, compress_job, clean_job))
+        jobs.extend((prefetch_job, fasterqdump_job, compress_job, clean_job))
 
     return jobs
 
 
 def sra_move_and_clean(accession_dir, outdir):
     # Enumarates all the files from the accession directory
-    for filename in listdir:
+    for filename in listdir(accession_dir):
         if filename.endswith('.gz'):
             rename(path.join(accession_dir, filename), path.join(outdir, filename))
 
@@ -301,7 +298,7 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
         return None
 
     # Create links to the bins
-    prefetch_bin = path.join(dest_dir, dirname, 'bin', 'prefetch')
+    prefetch_bin = path.join(path.abspath(dest_dir), dirname, 'bin', 'prefetch')
     prefetch_ln = path.join(dest_dir, 'prefetch')
     cmd = f'ln -s {prefetch_bin} {prefetch_ln}'
     ret = subprocess.run(cmd.split())
@@ -309,9 +306,9 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
         print(f'Impossible to create symbolic link {prefetch_ln}. SRA downloader has not been installed...', file=stderr)
         return None
 
-    fasterqdump_bin = path.join(dest_dir, dirname, 'bin', 'fasterq-dump')
+    fasterqdump_bin = path.join(path.abspath(dest_dir), dirname, 'bin', 'fasterq-dump')
     fasterqdump_ln = path.join(dest_dir, 'fasterq-dump')
-    cmd = f'ln -s {prefetch_bin} {fasterqdump_ln}'
+    cmd = f'ln -s {fasterqdump_bin} {fasterqdump_ln}'
     ret = subprocess.run(cmd.split())
     if ret.returncode != 0:
         print(f'Impossible to create symbolic link {fasterqdump_ln}. SRA downloader has not been installed...', file=stderr)
