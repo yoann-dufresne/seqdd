@@ -3,19 +3,36 @@
 A software to prepare a dataset environement from a set of accession number.
 The goal is to make data environement more portable to allow better reproducibility.
 
-Global command line:
+
+# Usage examples
+
+## Create a data register
+
+These commands will create a register of 3 datasets. The default location .register is used to store the accessions.
+
+```bash
+    python3 -m seqdd init
+    python3 -m seqdd add -s ncbi -a GCA_000001635 GCA_003774525.2
+    python3 -m seqdd add -s sra -a SRR000001
 ```
-    python3 -m seqdd [-h] [--register-location REGISTER_LOCATION] {init,add,download} ...
+
+## Download data from an existing register
+
+All the register files are downloaded into the data directory
+
+```bash
+    python3 -m seqdd dowload
 ```
 
-# Download data from an existing register
 
-## From a register directory
+# Tools description
 
-If a register directory containing all needed dataset is present in your project (usually a .register folder), you can use it to ask SedDD to download everything for you.
-If not specified, the dataset will be downloaded to a data directory next to the register.
+All the tools are applied to a register. Without specification, the .register directory is used as a register. To specify a register directory, use the `--register-location` option before your command.
 
-# Construct your own sequence data register
+General command line:
+```bash
+    python3 -m seqdd [-h] [--register-location REGISTER_LOCATION] {init,add,download} [options]
+```
 
 ## Init a a dataset register
 
@@ -53,3 +70,18 @@ Example with ncbi genome accessions
     python3 -m seqdd add --sources ncbi --accessions ACCESSION1 ACCESSION2 --file-of-accessions accessions.txt
 ```
 
+## Download the dataset from a register
+
+Subcommand download
+```
+    usage: seqdd download [-h] [-d DOWNLOAD_DIRECTORY]
+
+    options:
+      -h, --help            show this help message and exit
+      -d DOWNLOAD_DIRECTORY, --download-directory DOWNLOAD_DIRECTORY
+                            Directory where all the data will be downloaded
+```
+
+```bash
+    python3 -m seqdd download --download-directory my_data
+```
