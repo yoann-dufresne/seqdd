@@ -21,7 +21,7 @@ These commands will create a register of 3 datasets. The default location .regis
 All the register files are downloaded into the data directory
 
 ```bash
-    python3 -m seqdd dowload
+    python3 -m seqdd download
 ```
 
 
