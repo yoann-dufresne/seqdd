@@ -27,6 +27,7 @@ def parse_cmd():
     # Download entries from the register
     download = subparsers.add_parser('download', help='Download data from the register. The download process needs sra-tools, ncbi command-line tools and wget.')
     download.add_argument('-d', '--download-directory', default='data', help='Directory where all the data will be downloaded')
+    download.add_argument('-p', '--max-processes', type=int, default=8, help='Maximum number of processes to run in parallel.')
 
     args = parser.parse_args()
     return args
@@ -59,9 +60,8 @@ def on_add(args):
 
 def on_download(args):
     reg = Register(dirpath=args.register_location)
-    print(reg)
     dm = DownloadManager(reg, path.join(args.register_location, 'bin'))
-    dm.download_to(args.download_directory)
+    dm.download_to(args.download_directory, args.max_processes)
 
 
 if __name__ == "__main__":

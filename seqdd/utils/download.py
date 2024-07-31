@@ -5,6 +5,7 @@ from os import makedirs
 from sys import stderr
 import platform
 import subprocess
+from threading import Lock
 import time
 
 from seqdd.utils.scheduler import JobManager, CmdLineJob, FunctionJob
@@ -28,8 +29,15 @@ class DownloadManager:
 
         return self.ncbi, self.sra, wget
 
-    def download_to(self, datadir):
-        manager = JobManager(max_process=1)
+    def download_to(self, datadir, max_process=8):
+        '''
+        Download data from the register to datadir. Downloading can be parallelised
+
+            Parameters:
+                datadir (pathlike object): Path to the directory where the data should be downloaded.
+                max_process (int): Maximum number of processus to run in parallel.
+        '''
+        manager = JobManager(max_process=max_process)
         manager.start()
 
         # Creates the data directory if not existing
@@ -167,26 +175,54 @@ def download_datasets_software(dest_dir):
 
 ncbi_joib_id = 0
 def ncbi_jobs_from_accessions(accessions, dest_dir, datasets_bin):
-    # Job name
     global ncbi_joib_id
-    job_name = f'ncbi_job_{ncbi_joib_id}'
-    ncbi_joib_id += 1
+    ncbi_mutex = Lock()
+    last_ncbi_query = 0
 
-    # Download dehydrated job
-    download_file = path.join(dest_dir, f'{job_name}.zip')
-    download_job = CmdLineJob(f"{datasets_bin} download genome accession --dehydrated --filename {download_file} {' '.join(accessions)}")
-    
-    # Unzip Job
-    unzip_dir = path.join(dest_dir, job_name)
-    unzip_job = CmdLineJob(f"unzip {download_file} -d {unzip_dir}", parents=[download_job])
+    # Function to delay the queries to the server (avoid DDOS)
+    def ncbi_delay_ready():
+        # Minimal delay between ncbi queries (1s)
+        min_delay = 1
+        nonlocal last_ncbi_query
+        locked = ncbi_mutex.acquire(blocking=False)
+        ready = False
+        if locked:
+            # 5s since the last query ?
+            ready = time.time() - last_ncbi_query > min_delay
+            if ready:
+                last_ncbi_query = time.time()
+            ncbi_mutex.release()
+        return ready
 
-    # Data download
-    rehydrate_job = CmdLineJob(f"{datasets_bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job])
+    accessions = list(accessions)
+    all_jobs = []
 
-    # Data reorganization
-    reorg_job = FunctionJob(ncbi_clean, func_args=(download_file, unzip_dir, dest_dir), parents=[rehydrate_job])
+    # Download accessions by batch of 5
+    for idx in range(0, len(accessions), 5):
+        # Job name
+        job_name = f'ncbi_job_{ncbi_joib_id}'
+        ncbi_joib_id += 1
 
-    return download_job, unzip_job, rehydrate_job, reorg_job
+        # Take the right slice of 5 accessions
+        acc_slice = accessions[idx:idx+5]
+
+        # Download dehydrated job
+        download_file = path.join(dest_dir, f'{job_name}.zip')
+        download_job = CmdLineJob(f"{datasets_bin} download genome accession --dehydrated --filename {download_file} {' '.join(acc_slice)}", can_start=ncbi_delay_ready)
+        
+        # Unzip Job
+        unzip_dir = path.join(dest_dir, job_name)
+        unzip_job = CmdLineJob(f"unzip {download_file} -d {unzip_dir}", parents=[download_job])
+
+        # Data download
+        rehydrate_job = CmdLineJob(f"{datasets_bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job], can_start=ncbi_delay_ready)
+
+        # Data reorganization
+        reorg_job = FunctionJob(ncbi_clean, func_args=(download_file, unzip_dir, dest_dir), parents=[rehydrate_job])
+
+        all_jobs.extend([download_job, unzip_job, rehydrate_job, reorg_job])
+
+    return all_jobs
 
 
 def ncbi_clean(archive, unzip_dir, dest_dir):
@@ -221,14 +257,33 @@ def sra_jobs_from_accessions(accessions, datadir, binaries):
 
     # Each dataset download is independant
     for acc in accessions:
+        # Delay mechanism
+        sra_mutex = Lock()
+        last_sra_query = 0
+
+        # Function to delay the queries to the server (avoid DDOS)
+        def sra_delay_ready():
+            # Minimal delay between ncbi queries (1s)
+            min_delay = 1
+            nonlocal last_sra_query
+            locked = sra_mutex.acquire(blocking=False)
+            ready = False
+            if locked:
+                # 5s since the last query ?
+                ready = time.time() - last_sra_query > min_delay
+                if ready:
+                    last_sra_query = time.time()
+                sra_mutex.release()
+            return ready
+
         # Prefetch data
         cmd = f'./{binaries["prefetch"]} --max-size u --output-directory {datadir} {acc}'
-        prefetch_job = CmdLineJob(cmd)
+        prefetch_job = CmdLineJob(cmd, can_start=sra_delay_ready)
 
         # Split files
         accession_dir = path.join(datadir, acc)
         cmd = f'{binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
-        fasterqdump_job = CmdLineJob(cmd, parents=[prefetch_job])
+        fasterqdump_job = CmdLineJob(cmd, parents=[prefetch_job], can_start=sra_delay_ready)
         
         # Compress files
         cmd = f'gzip {path.join(accession_dir, "*.fastq")}'
