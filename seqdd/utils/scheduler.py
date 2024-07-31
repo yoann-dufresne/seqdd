@@ -36,6 +36,10 @@ class JobManager(Thread):
                 if job.get_returncode() != 0:
                     self.cancel_job(job)
                 job.join()
+                if job.get_returncode() == 0:
+                    print('DONE', job)
+                else:
+                    print('ERROR', job)
 
             # Add new processes
             to_remove = []
@@ -44,11 +48,13 @@ class JobManager(Thread):
                 if len(self.running) >= self.max_process:
                     break
                 # Wait for all dependancies to be finished
-                if not all(j.is_over for j in job.parents):
+                if not job.is_ready():
                     continue
+
                 # Start a new job
                 to_remove.append(job)
                 self.running.append(job)
+                print('START', job)
                 job.start()
 
             # Remove jobs from waiting list
@@ -101,19 +107,53 @@ class JobManager(Thread):
 
 
 class Job:
-    def __init__(self, parents=[]):
+    """
+    A class to represent a Job.
+
+    ...
+
+    Attributes
+    ----------
+    process : Depends on the job type
+        Subprocess that runs outside of the python program
+    is_over : bool
+        True if the job is finished or canceled
+    parents : Array
+        A list of parent jobs to wait before running this one.
+    can_start : Function
+        A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+    """
+    def __init__(self, parents=[], can_start=lambda:True):
+        """
+        Constructs all the necessary attributes for the person object.
+
+        Parameters
+        ----------
+            parents : Array
+                A list of parent jobs to wait before running this one.
+            can_start : Function
+                A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+        """
         self.parents = parents
         self.is_over = False
         self.process = None
+        self.can_start = can_start
 
     def is_ready(self):
-        return all(x.is_over in self.parents)
+        # Already over
+        if self.is_over:
+            return False
+        # Parents are still running
+        if not all(x.is_over for x in self.parents):
+            return False
+        # Are all the conditions to run present ?
+        return self.can_start()
 
     def start(self):
-        print(f'START {self}')
+        raise NotImplementedError()
 
     def stop(self):
-        print(f'STOP {self}')
+        raise NotImplementedError()
 
     def get_returncode(self):
         raise NotImplementedError()
@@ -123,14 +163,28 @@ class Job:
 
 
 class FunctionJob(Job):
-    def __init__(self, func_to_run, func_args=(), parents=[]):
-        super().__init__(parents=parents)
+    '''
+    A Job class that wrap a function to run in a subprocess.
+    '''
+    def __init__(self, func_to_run, func_args=(), parents=[], can_start=lambda:True):
+        '''
+            Parameters
+            ----------
+            func_to_run: Function
+                The function to run inside the subprocess.
+            func_args: Tuple
+                A tuple of arguments to give to the function to run
+            parents : Array
+                A list of parent jobs to wait before running this one.
+            can_start : Function
+                A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+        '''
+        super().__init__(parents=parents, can_start=can_start)
         self.to_run = func_to_run
         self.args = func_args
         self.process = Process(target=func_to_run, args=func_args)
 
     def start(self):
-        super().start()
         self.process.start()
 
 
@@ -144,7 +198,6 @@ class FunctionJob(Job):
             self.process.join(timeout=5)
         if self.process.is_alive():
             self.process.terminate()
-        super().stop()
 
     def get_returncode(self):
         if self.process is None:
@@ -166,13 +219,24 @@ class FunctionJob(Job):
 
 
 class CmdLineJob(Job):
-
-    def __init__(self, command_line, parents=[]):
-        super().__init__(parents=parents)
+    '''
+    A Job class that wrap a command line to run in a subprocess.
+    '''
+    def __init__(self, command_line, parents=[], can_start=lambda:True):
+        '''
+            Parameters
+            ----------
+            command_line: string
+                A command line to run in a bash subprocess.
+            parents : Array
+                A list of parent jobs to wait before running this one.
+            can_start : Function
+                A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+        '''
+        super().__init__(parents=parents, can_start=can_start)
         self.cmd = command_line
 
     def start(self):
-        super().start()
         self.process = subprocess.Popen(self.cmd, shell=True)
 
     def stop(self):
@@ -184,7 +248,6 @@ class CmdLineJob(Job):
         self.process.communicate(timeout=5)
         if self.process.returncode is None:
             self.process.terminate()
-        super().stop()
 
     def is_alive(self):
         alive = self.process.poll() is None
