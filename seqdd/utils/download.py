@@ -37,33 +37,46 @@ class DownloadManager:
                 datadir (pathlike object): Path to the directory where the data should be downloaded.
                 max_process (int): Maximum number of processus to run in parallel.
         '''
-        manager = JobManager(max_process=max_process)
-        manager.start()
 
         # Creates the data directory if not existing
         makedirs(datadir, exist_ok=True)
 
         # --- ncbi genomes ---
+        ncbi_jobs = []
         ncbi_reg = self.register.subregisters['ncbi']
         if len(ncbi_reg) > 0:
             downloadable = self.ncbi is not None
             if downloadable:
-                manager.add_processes(ncbi_jobs_from_accessions(ncbi_reg, datadir, self.ncbi['datasets']))
+                ncbi_jobs.extend(ncbi_jobs_from_accessions(ncbi_reg, datadir, self.ncbi['datasets']))
 
             else:
                 print(f'ncbi genomes cannot be downloaded because the datasets tool is absent from the system. Skipping {len(ncbi_reg)} datasets.', file=stderr)
 
         # --- sra datasets ---
+        sra_jobs = []
         sra_reg = self.register.subregisters['sra']
         if len(sra_reg) > 0:
             downloadable = self.sra is not None
             if downloadable:
-                manager.add_processes(sra_jobs_from_accessions(sra_reg, datadir, self.sra))
+                sra_jobs.extend(sra_jobs_from_accessions(sra_reg, datadir, self.sra))
             else:
                 print(f'SRA data cannot be downloaded because the sra-tools are absent from the system. Skipping {len(sra_reg)} datasets.', file=stderr)
 
         # --- wget files ---
+        wget_jobs = []
         # TODO
+
+        manager = JobManager(max_process=max_process)
+        manager.start()
+
+        # submit the jobs in an interleaved way
+        while len(ncbi_jobs) + len(sra_jobs) + len(wget_jobs) > 0:
+            if len(ncbi_jobs) > 0:
+                manager.add_process(ncbi_jobs.pop(0))
+            if len(sra_jobs) > 0:
+                manager.add_process(sra_jobs.pop(0))
+            if len(wget_jobs) > 0:
+                manager.add_process(wget_jobs.pop(0))
 
         while manager.remaining_jobs() > 0:
             # print(manager)
