@@ -3,7 +3,7 @@ from os import path
 from sys import stderr
 
 from seqdd.utils.reg_manager import load_source, save_source, create_register, Register
-from seqdd.utils.download import DownloadManager
+from seqdd.downloaders.download import DownloadManager
 
 
 def parse_cmd():
