@@ -1,3 +1,4 @@
+from sys import stderr
 from threading import Thread
 from multiprocessing import Process, Event
 import subprocess
@@ -39,7 +40,7 @@ class JobManager(Thread):
                 if job.get_returncode() == 0:
                     print('DONE', job)
                 else:
-                    print('ERROR', job)
+                    print('ERROR', job, '\n', job.get_returncode(), file=stderr)
 
             # Add new processes
             to_remove = []

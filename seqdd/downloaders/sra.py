@@ -9,6 +9,11 @@ import time
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
 
+def valid_accessions(accessions):
+    print('TODO: Validate sra accessions...')
+    return accessions
+
+
 def jobs_from_accessions(accessions, datadir, binaries):
     jobs = []
 

@@ -1,15 +1,10 @@
-import seqdd.downloaders.ncbi as ncbi
-import seqdd.downloaders.sra as sra
-from shutil import rmtree
-from os import path, listdir, rename, remove
-from os import makedirs
+from seqdd.downloaders import url, ncbi, sra
+from os import path, makedirs
 from sys import stderr
-import platform
 import subprocess
-from threading import Lock
 import time
 
-from seqdd.utils.scheduler import JobManager, CmdLineJob, FunctionJob
+from seqdd.utils.scheduler import JobManager
 
 
 # -------------------- Global download manager --------------------
@@ -64,20 +59,24 @@ class DownloadManager:
                 print(f'SRA data cannot be downloaded because the sra-tools are absent from the system. Skipping {len(sra_reg)} datasets.', file=stderr)
 
         # --- wget files ---
-        wget_jobs = []
-        # TODO
+        url_jobs = []
+        url_reg = self.register.subregisters['url']
+        if len(url_reg) > 0:
+            url_jobs = url.jobs_from_accessions(url_reg, datadir)
 
         manager = JobManager(max_process=max_process)
         manager.start()
 
         # submit the jobs in an interleaved way
-        while len(ncbi_jobs) + len(sra_jobs) + len(wget_jobs) > 0:
+        while len(ncbi_jobs) + len(sra_jobs) + len(url_jobs) > 0:
             if len(ncbi_jobs) > 0:
                 manager.add_process(ncbi_jobs.pop(0))
             if len(sra_jobs) > 0:
                 manager.add_process(sra_jobs.pop(0))
-            if len(wget_jobs) > 0:
-                manager.add_process(wget_jobs.pop(0))
+            if len(url_jobs) > 0:
+                manager.add_process(url_jobs.pop(0))
+
+        print(manager)
 
         while manager.remaining_jobs() > 0:
             # print(manager)

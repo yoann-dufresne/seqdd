@@ -9,6 +9,11 @@ import time
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
 
+def valid_accessions(accessions):
+    print('TODO: Validate ncbi accessions...')
+    return accessions
+
+
 def download_datasets_software(dest_dir):
     download_link = ''
     supported = True
