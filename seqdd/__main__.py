@@ -18,7 +18,7 @@ def parse_cmd():
     # Init register command
     init = subparsers.add_parser('init', help='Initialise the data register')
     init.add_argument('-f', '--force', action='store_true', help='Force reconstruction of the register')
-    # init.add_argument()
+    init.add_argument('-r', '--register-file', type=str, help='Init the local register from the register file')
 
     # Add entries to the register
     add = subparsers.add_parser('add', help='Add dataset(s) to manage')
@@ -33,7 +33,7 @@ def parse_cmd():
 
     # Export the register
     export = subparsers.add_parser('export', help='Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.')
-    export.add_argument('-o', '--output-register', type=str, default='myregister.reg', help='Name of the register file. Please prefer filenames .reg terminated)')
+    export.add_argument('-o', '--output-register', type=str, default='myregister.reg', help='Name of the register file. Please prefer filenames .reg terminated.')
 
     args = parser.parse_args()
     return args
@@ -42,7 +42,7 @@ def parse_cmd():
 def on_init(args):
     print('Init register')
     location = args.register_location
-    create_register(location, force=args.force)
+    register = create_register(location, force=args.force)
 
 
 def on_add(args):
