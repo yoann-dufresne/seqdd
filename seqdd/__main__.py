@@ -43,6 +43,9 @@ def on_init(args):
     print('Init register')
     location = args.register_location
     register = create_register(location, force=args.force)
+    if args.register_file is not None:
+        register.load_from_file(args.register_file)
+        register.save_to_dir(location)
 
 
 def on_add(args):

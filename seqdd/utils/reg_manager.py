@@ -108,7 +108,7 @@ class Register:
             if prefix != 'version':
                 print('Missing version number at the beginning of the reg file. Skipping...', file=stderr)
                 return
-            major, minor = version.split('.')
+            major, minor = (int(x) for x in version.split('.'))
             if major != self.major_version:
                 print(f'Incompatible versions. Your register is major version {major} while the tool awaits version {Register.major_version}. Skipping...', file=stderr)
                 return
@@ -130,6 +130,7 @@ class Register:
                 # Add the next accession from the current register
                 else :
                     self.subregisters[current_register].add(line)
+                    remaining_to_read -= 1
 
     def __repr__(self):
         return '\n'.join(f'{sub} : [{", ".join(self.subregisters[sub])}]' for sub in self.subregisters)

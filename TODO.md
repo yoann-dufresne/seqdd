@@ -1,4 +1,3 @@
-* Create a register from a .reg file: Load a .reg file and locally creates the register from it.
 * Verify data availability on add
 * Verify data availability before download
 * Add a logger: Print all the infos into various log files.
@@ -6,5 +5,4 @@
 * Saving already downloaded files: Create a downloaded files register to avoid downloading multiple time the same file.
 * Add url support for s3
 * Add url support for gs
-* Add a name per file with url
 * Allow download path hierarchy
