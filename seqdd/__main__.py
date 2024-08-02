@@ -86,7 +86,8 @@ def on_export(args):
     reg = Register(dirpath=args.register_location)
     reg.save_to_file(args.output_register)
 
-if __name__ == "__main__":
+
+def main():
     args = parse_cmd()
     # print(args)
 
@@ -97,5 +98,8 @@ if __name__ == "__main__":
             exit(1)
 
     # Apply the right command
-    cmd_to_apply = locals()[f"on_{args.cmd}"]
+    cmd_to_apply = globals()[f"on_{args.cmd}"]
     cmd_to_apply(args)
+
+if __name__ == "__main__":
+    main()
