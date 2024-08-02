@@ -3,6 +3,15 @@
 A software to prepare a dataset environement from a set of accession number.
 The goal is to make data environement more portable to allow better reproducibility.
 
+# Install the tool
+
+## From the sources
+
+```bash
+    git clone https://github.com/yoann-dufresne/seqdd.git seqdd/
+    cd seqdd
+    pip install .
+```
 
 # Usage examples
 
@@ -11,15 +20,15 @@ The goal is to make data environement more portable to allow better reproducibil
 Creates a register of 3 datasets. The default location .register is used to store the accessions.
 
 ```bash
-    python3 -m seqdd init
-    python3 -m seqdd add -s ncbi -a GCA_000001635 GCA_003774525.2
-    python3 -m seqdd add -s sra -a SRR000001
+    seqdd init
+    seqdd add -s ncbi -a GCA_000001635 GCA_003774525.2
+    seqdd add -s sra -a SRR000001
 ```
 
 An altertnative way to create the register is to load a .reg file during the init as follow:
 
 ```bash
-    python3 -m seqdd init -r myregister.reg
+    seqdd init -r myregister.reg
 ```
 
 ## Download data from an existing register
@@ -27,13 +36,13 @@ An altertnative way to create the register is to load a .reg file during the ini
 All the register files are downloaded into the data directory
 
 ```bash
-    python3 -m seqdd download
+    seqdd download
 ```
 
 ## Exporting my data register for others
 
 ```bash
-    python3 -m seqdd export -o myregister.reg
+    seqdd export -o myregister.reg
 ```
 
 
@@ -77,7 +86,7 @@ Subcommand init:
 ```
 
 ```bash
-    python3 -m seqdd init --register-file aregisterfile.reg
+    seqdd init --register-file aregisterfile.reg
 ```
 
 ## Add sequences to the register
@@ -98,7 +107,7 @@ Subcommand add:
 
 Example with ncbi genome accessions
 ```bash
-    python3 -m seqdd add --sources ncbi --accessions ACCESSION1 ACCESSION2 --file-of-accessions accessions.txt
+    seqdd add --sources ncbi --accessions ACCESSION1 ACCESSION2 --file-of-accessions accessions.txt
 ```
 
 ## Download the dataset from an already setup register
@@ -116,7 +125,7 @@ Subcommand download
 ```
 
 ```bash
-    python3 -m seqdd download --download-directory my_data
+    seqdd download --download-directory my_data
 ```
 
 ## Export the dataset metadata to a .reg file
@@ -132,5 +141,5 @@ Subcommand export
 ```
 
 ```bash
-    python3 -m seqdd export --output-register myregister.reg
+    seqdd export --output-register myregister.reg
 ```

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[project]
+name = "seqdd"
+version = "0.0"
+authors = [
+  { name="Yoann Dufresne", email="yoann.dufresne@pasteur.fr" },
+]
+description = "A package to share andd download a biological sequence dataset using register files. It's goal is to simplify the download process while improving the reproducibility."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: Unix",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Intended Audience :: Science/Research",
+    "Environment :: Console",
+    "Development Status :: 3 - Alpha"
+]
+
+[project.urls]
+Homepage = "https://github.com/yoann-dufresne/seqdd"
+Issues = "https://github.com/yoann-dufresne/seqdd/issues"
+
+[project.scripts]
+seqdd = "seqdd.__main__:main"
