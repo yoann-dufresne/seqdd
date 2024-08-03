@@ -103,7 +103,10 @@ def check_binaries(binary_names, bindir, download_function):
     for binary_name in binary_names:
         # Global install
         try:
-            if subprocess.run(f'{binary_name} --version'.split(' ')) == 0:
+            cmd = f'{binary_name} --version'
+            ret = subprocess.run(cmd.split(' '))
+            print(ret, cmd)
+            if ret.returncode == 0:
                 binaries[binary_name] = binary_name
                 installed[binary_name] = True
                 continue
@@ -131,7 +134,9 @@ def check_binaries(binary_names, bindir, download_function):
     for name, local_bin in binpaths.items():
     # Exec locally installed binary
         try:
-            ret = subprocess.run(f'{local_bin} --version'.split(' '))
+            cmd = f'{local_bin} --version'
+            ret = subprocess.run(cmd.split(' '))
+            print(ret, cmd)
             if ret.returncode == 0:
                 binaries[name] = local_bin
         except FileNotFoundError:
