@@ -1,4 +1,4 @@
-from os import listdir, path, remove, rename
+from os import listdir, makedirs, path, remove, rename
 import platform
 from shutil import rmtree
 import subprocess
@@ -84,6 +84,7 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
     if system == 'Linux':
         download_link = f'https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/{version}/sratoolkit.{version}-ubuntu64.tar.gz'
         dirname = f'sratoolkit.{version}-ubuntu64'
+        tarname = f'{dirname}.tar.gz'
     elif system == 'Windows':
         print('Windows plateforms are not supported by seqdd.', file=stderr)
         exit(3)
@@ -97,15 +98,20 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
         return None
 
     # Download sra toolkit
-    cmd = f'wget {download_link} --directory-prefix={path.abspath(dest_dir)}'
+    dest_dir = path.abspath(dest_dir)
+    makedirs(dest_dir, exist_ok=True)
+    cmd = f'curl -o {path.join(dest_dir, tarname)} {download_link}'
     ret = subprocess.run(cmd.split())
+
+    print(cmd)
+    exit(0)
 
     if ret.returncode != 0:
         print('Impossible to automatically download sratoolkit. SRA downloader has not been installed...', file=stderr)
         return None
 
     # Uncompress the archive
-    archive_path = path.join(dest_dir, f'{dirname}.tar.gz')
+    archive_path = path.join(dest_dir, tarname)
     cmd = f'tar -xzf {archive_path} -C {dest_dir}'
     ret = subprocess.run(cmd.split())
     remove(archive_path)
