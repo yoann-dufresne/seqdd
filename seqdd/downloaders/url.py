@@ -6,11 +6,11 @@ from seqdd.utils.scheduler import CmdLineJob
 
 def valid_accessions(urls):
     # Verify schemes
-    valid_schemes = set(('http', 'https', 'ftp'))
+    valid_schemes = set(('http', 'https', 'ftp', 'dict', 'file', 'ftps', 'gopher', 'imap', 'imaps', 'ldap', 'ldaps', 'pop3', 'pop3s', 'rtmp', 'rtsp', 'scp', 'sftp', 'smb', 'smbs', 'smtp', 'smtps', 'telnet', 'tftp'))
 
     valid_urls = set()
     for url in urls:
-        scheme = url[:url.find(':')]
+        scheme = url[:url.find(':')].lower()
         if scheme in valid_schemes:
             valid_urls.add(url)
         else:
@@ -42,6 +42,6 @@ def jobs_from_accessions(urls, datadir, outfilenames={}):
         filename = outfilenames[url]
 
         # Make the download
-        jobs.append(CmdLineJob(f'wget "{url}" -O {path.join(datadir, filename)}'))
+        jobs.append(CmdLineJob(f'curl -o {path.join(datadir, filename)} "{url}"'))
 
     return jobs

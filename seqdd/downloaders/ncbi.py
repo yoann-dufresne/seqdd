@@ -1,4 +1,4 @@
-from os import listdir, path, remove, rename
+from os import listdir, makedirs, path, remove, rename
 import platform
 from shutil import rmtree
 import subprocess
@@ -41,7 +41,13 @@ def download_datasets_software(dest_dir):
 
     # Download datasets
     print('Download the ncbi datasets cli binnary...')
-    cmd = f'wget {download_link} --directory-prefix={path.abspath(dest_dir)}'
+    
+    # Prepare the bin directory
+    dest_dir = path.abspath(dest_dir)
+    makedirs(dest_dir, exist_ok=True)
+    
+    # Download...
+    cmd = f'curl -o {path.join(dest_dir, "datasets")} {download_link}'
     ret = subprocess.run(cmd.split())
 
     if ret.returncode == 0:
