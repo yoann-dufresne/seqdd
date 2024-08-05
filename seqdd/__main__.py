@@ -66,7 +66,7 @@ def on_add(args):
 
     # Verification of the accessions
     modules = {'ncbi': ncbi, 'sra':sra, 'url': url}
-    valid_accessions = modules[args.source].valid_accessions(args.accessions)
+    valid_accessions = modules[args.source].filter_valid_accessions(args.accessions)
     
     # Add valid accessions
     accessions.update(valid_accessions)
