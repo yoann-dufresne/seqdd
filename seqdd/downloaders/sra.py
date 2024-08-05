@@ -9,7 +9,7 @@ import time
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
 
-def valid_accessions(accessions):
+def filter_valid_accessions(accessions):
     print('TODO: Validate sra accessions...')
     return accessions
 
