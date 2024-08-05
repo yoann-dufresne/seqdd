@@ -39,7 +39,7 @@ def jobs_from_accessions(accessions, datadir, binaries):
             return ready
 
         # Prefetch data
-        cmd = f'./{binaries["prefetch"]} --max-size u --output-directory {datadir} {acc}'
+        cmd = f'{binaries["prefetch"]} --max-size u --output-directory {datadir} {acc}'
         prefetch_job = CmdLineJob(cmd, can_start=sra_delay_ready)
 
         # Split files
@@ -103,9 +103,6 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
     cmd = f'curl -o {path.join(dest_dir, tarname)} {download_link}'
     ret = subprocess.run(cmd.split())
 
-    print(cmd)
-    exit(0)
-
     if ret.returncode != 0:
         print('Impossible to automatically download sratoolkit. SRA downloader has not been installed...', file=stderr)
         return None
@@ -121,7 +118,7 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
         return None
 
     # Create links to the bins
-    prefetch_bin = path.join(path.abspath(dest_dir), dirname, 'bin', 'prefetch')
+    prefetch_bin = path.join(dest_dir, dirname, 'bin', 'prefetch')
     prefetch_ln = path.join(dest_dir, 'prefetch')
     cmd = f'ln -s {prefetch_bin} {prefetch_ln}'
     ret = subprocess.run(cmd.split())
@@ -129,7 +126,7 @@ def download_sra_toolkit(dest_dir, version='3.1.1'):
         print(f'Impossible to create symbolic link {prefetch_ln}. SRA downloader has not been installed...', file=stderr)
         return None
 
-    fasterqdump_bin = path.join(path.abspath(dest_dir), dirname, 'bin', 'fasterq-dump')
+    fasterqdump_bin = path.join(dest_dir, dirname, 'bin', 'fasterq-dump')
     fasterqdump_ln = path.join(dest_dir, 'fasterq-dump')
     cmd = f'ln -s {fasterqdump_bin} {fasterqdump_ln}'
     ret = subprocess.run(cmd.split())

@@ -1,4 +1,5 @@
 from os import path
+import subprocess
 from sys import stderr
 
 from seqdd.utils.scheduler import CmdLineJob
@@ -6,19 +7,32 @@ from seqdd.utils.scheduler import CmdLineJob
 
 def valid_accessions(urls):
     # Verify schemes
-    valid_schemes = set(('http', 'https', 'ftp', 'dict', 'file', 'ftps', 'gopher', 'imap', 'imaps', 'ldap', 'ldaps', 'pop3', 'pop3s', 'rtmp', 'rtsp', 'scp', 'sftp', 'smb', 'smbs', 'smtp', 'smtps', 'telnet', 'tftp'))
+    curl_schemes = set(('http', 'https', 'ftp'))
 
     valid_urls = set()
     for url in urls:
         scheme = url[:url.find(':')].lower()
-        if scheme in valid_schemes:
-            valid_urls.add(url)
-        else:
+        if scheme not in curl_schemes:
             print(f'WARNING: scheme {scheme} not supported.', file=stderr)
             print(f'url ignored: {url}', file=stderr)
 
-    # Verify that a file is present through the URL
-    print('TODO: Validate url accessions...')
+        # Verify that a file is present through the URL
+        verif_cmd = f'curl -X GET url -I "{url}"'
+        res = subprocess.run(verif_cmd, shell=True, capture_output=True, text=True)
+
+        # curl fail
+        if res.returncode != 0:
+            continue
+
+        # bad http answer
+        for line in res.stdout.split('\n'):
+            if line.startswith(scheme[:4].upper()):
+                code = int(line.strip().split(' ')[-1])
+                if code == 200:
+                    valid_urls.add(url)
+                else:
+                    print(f'ERROR: {url}\nCannot donwload from this url. Error code: {code}\nSkipping...', file=stderr)
+                break
     return valid_urls
 
 def jobs_from_accessions(urls, datadir, outfilenames={}):
