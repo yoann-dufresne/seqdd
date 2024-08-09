@@ -1,5 +1,6 @@
 import argparse
 from os import path
+import platform
 from sys import stderr
 
 from seqdd.utils.reg_manager import load_source, save_source, create_register, Register
@@ -30,6 +31,7 @@ def parse_cmd():
     download = subparsers.add_parser('download', help='Download data from the register. The download process needs sra-tools, ncbi command-line tools and wget.')
     download.add_argument('-d', '--download-directory', default='data', help='Directory where all the data will be downloaded')
     download.add_argument('-p', '--max-processes', type=int, default=8, help='Maximum number of processes to run in parallel.')
+    download.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
 
     # Export the register
     export = subparsers.add_parser('export', help='Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.')
@@ -78,7 +80,7 @@ def on_add(args):
 
 def on_download(args):
     reg = Register(dirpath=args.register_location)
-    dm = DownloadManager(reg, path.join(args.register_location, 'bin'))
+    dm = DownloadManager(reg, path.join(args.register_location, 'bin'), args.tmp_directory)
     dm.download_to(args.download_directory, args.max_processes)
 
 
@@ -88,8 +90,13 @@ def on_export(args):
 
 
 def main():
+    # Platform check
+    system = platform.system()
+    if system == 'Windows':
+        print('Windows plateforms are not supported by seqdd.', file=stderr)
+        exit(3)
+
     args = parse_cmd()
-    # print(args)
 
     # Verify the existance of the data register
     if args.cmd != 'init':
