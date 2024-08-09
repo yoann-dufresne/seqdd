@@ -26,6 +26,7 @@ def parse_cmd():
     add.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='Download source. Can download from ncbi genomes, sra or an arbitrary url (uses wget to download)', required=True)
     add.add_argument('-a', '--accessions', nargs='+', default=[], help='List of accessions to register')
     add.add_argument('-f', '--file-of-accessions', default="", help='A file containing accessions to download, 1 per line')
+    add.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
 
     # Download entries from the register
     download = subparsers.add_parser('download', help='Download data from the register. The download process needs sra-tools, ncbi command-line tools and wget.')
@@ -67,8 +68,9 @@ def on_add(args):
             new_accessions.update(x.strip() for x in fr if len(x.strip()) > 0)
 
     # Verification of the accessions
-    modules = {'ncbi': ncbi, 'sra':sra, 'url': url}
-    valid_accessions = modules[args.source].filter_valid_accessions(args.accessions)
+    classes = {'ncbi': ncbi.NCBI, 'sra':sra.SRA, 'url': url.URL}
+    validator = classes[args.source](tmpdir=args.tmp_directory, bindir=path.join(args.register_location, 'bin'))
+    valid_accessions = validator.filter_valid_accessions(frozenset(args.accessions))
     
     # Add valid accessions
     accessions.update(valid_accessions)
