@@ -8,14 +8,15 @@ import time
 
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 from seqdd.downloaders.download import check_binary
+import json
 
 
 class NCBI:
     ncbi_joib_id = 0
 
-    def __init__(self, tmp_dir, bin_dir):
-        self.tmp_dir = tmp_dir
-        self.bin_dir = bin_dir
+    def __init__(self, tmpdir, bindir):
+        self.tmp_dir = tmpdir
+        self.bin_dir = bindir
         self.mutex = Lock()
 
         self.bin = self.get_download_software()
@@ -92,10 +93,59 @@ class NCBI:
         # Clean the download directory
         rmtree(tmp_dir)
 
-    def filter_valid_accessions(accessions):
-        cmd = ''
-        print('TODO: Validate ncbi accessions...')
-        return accessions
+    def filter_valid_accessions(self, accessions):
+        accessions_list = list(accessions)
+        valid_accessions = set()
+
+        for idx in range(0, len(accessions), 10):
+            # Accessions slice to validate
+            accessions_slice = accessions_list[idx:idx+10]
+
+            # Create a temporary directory for the current validation
+            tmp_path = path.join(self.tmp_dir, f'ncbi_valid_{idx}')
+            makedirs(tmp_path)
+            archive_path = path.join(tmp_path, 'accessions.zip')
+
+            # Download the accessions info
+            cmd = f'{self.bin} download genome accession {" ".join(accessions_slice)} --include none --filename {archive_path}'
+            ret = subprocess.run(cmd.split())
+
+            # Check download status
+            if ret.returncode != 0:
+                print(f'Datasets software error while downloading the accessions info: {ret.stderr}', file=stderr)
+                print(f'Skipping the validation of the accessions: {accessions_slice}', file=stderr)
+                continue
+
+            # Unzip the accessions info
+            unzip_path = path.join(tmp_path, 'accessions')
+            cmd = f'unzip {archive_path} -d {unzip_path}'
+            ret = subprocess.run(cmd.split())
+
+            # Check unzip status
+            if ret.returncode != 0:
+                print(f'Impossible to unzip the accessions info: {archive_path}', file=stderr)
+                print(f'Skipping the validation of the accessions: {accessions_slice}', file=stderr)
+                continue
+
+            # Check the accessions
+            with open(path.join(unzip_path, 'ncbi_dataset', 'data', 'assembly_data_report.jsonl')) as fr:
+                for line in fr:
+                    # parse the json from the line
+                    data = json.loads(line)
+                    line_acc = data['accession']
+                    if line_acc in accessions_slice:
+                        valid_accessions.add(line_acc)
+
+            # Clean the temporary directory
+            rmtree(tmp_path)
+            
+        # Print the list of invalid accessions
+        invalid_accessions = accessions - valid_accessions
+        if len(invalid_accessions) > 0:
+            print(f'The following accessions are invalid: {", ".join(list(invalid_accessions))}', file=stderr)
+            print('Those accessions will be ignored.', file=stderr)
+
+        return valid_accessions
     
 
     def get_download_software(self):
