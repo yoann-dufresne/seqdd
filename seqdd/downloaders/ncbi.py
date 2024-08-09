@@ -114,6 +114,7 @@ class NCBI:
             if ret.returncode != 0:
                 print(f'Datasets software error while downloading the accessions info: {ret.stderr}', file=stderr)
                 print(f'Skipping the validation of the accessions: {accessions_slice}', file=stderr)
+                rmtree(tmp_path)
                 continue
 
             # Unzip the accessions info
@@ -125,6 +126,7 @@ class NCBI:
             if ret.returncode != 0:
                 print(f'Impossible to unzip the accessions info: {archive_path}', file=stderr)
                 print(f'Skipping the validation of the accessions: {accessions_slice}', file=stderr)
+                rmtree(tmp_path)
                 continue
 
             # Check the accessions
@@ -142,7 +144,7 @@ class NCBI:
         # Print the list of invalid accessions
         invalid_accessions = accessions - valid_accessions
         if len(invalid_accessions) > 0:
-            print(f'The following accessions are invalid: {", ".join(list(invalid_accessions))}', file=stderr)
+            print(f'The following accessions are skipped: {", ".join(list(invalid_accessions))}', file=stderr)
             print('Those accessions will be ignored.', file=stderr)
 
         return valid_accessions
