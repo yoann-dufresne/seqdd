@@ -1,4 +1,5 @@
-from sys import stderr
+from os import path
+import sys
 from threading import Thread
 from multiprocessing import Process, Event
 import subprocess
@@ -7,14 +8,17 @@ import time
 
 class JobManager(Thread):
 
-    def __init__(self, max_process=8):
+    def __init__(self, logger, max_process=8, log_folder=None):
         super().__init__()
         # Jobs queues
         self.processes = []
         self.waiting = []
         self.running = []
         self.dependancies = {}
+        # Logger
         self.max_process = max_process
+        self.log_folder = path.abspath(log_folder) if log_folder is not None else None
+        self.logger = logger
         # Boolean used to stop the thread
         self.stopped = Event()
         self.stopped.clear()
@@ -38,9 +42,10 @@ class JobManager(Thread):
                     self.cancel_job(job)
                 job.join()
                 if job.get_returncode() == 0:
-                    print('DONE', job)
+                    self.logger.info(f'DONE {job}')
                 else:
-                    print('ERROR', job, '\n', job.get_returncode(), file=stderr)
+                    self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
+                    self.logger.error(f'Please check the log file for more details: {job.log_file}')
 
             # Add new processes
             to_remove = []
@@ -55,7 +60,7 @@ class JobManager(Thread):
                 # Start a new job
                 to_remove.append(job)
                 self.running.append(job)
-                print('START', job)
+                self.logger.info(f'START {job}')
                 job.start()
 
             # Remove jobs from waiting list
@@ -71,7 +76,7 @@ class JobManager(Thread):
                 job.join()
 
     def cancel_job(self, job):
-        print('CANCEL', job)
+        self.logger.warning(f'CANCEL {job}')
         # Cancel descendance
         if job in self.dependancies:
             for desc in self.dependancies[job]:
@@ -84,7 +89,13 @@ class JobManager(Thread):
             self.waiting.remove(job)
         job.stop()        
 
-    def add_process(self, process):
+    def add_job(self, process):
+        # Modify the log file path
+        if self.log_folder is not None:
+            logfile_base = path.basename(process.log_file)
+            logfile = path.join(self.log_folder, logfile_base)
+            process.set_log_file(logfile)
+
         # Add the dependancies of the process
         for parent in process.parents:
             if parent not in self.dependancies:
@@ -98,16 +109,18 @@ class JobManager(Thread):
     def remaining_jobs(self):
         return len(self.waiting) + len(self.running)
 
-    def add_processes(self, processes):
+    def add_jobs(self, processes):
         for p in processes:
             # Add the process
-            self.add_process(p)
+            self.add_job(p)
 
     def __repr__(self):
         return f'running: {len(self.running)}\nwaiting: {len(self.waiting)}\ntotal: {len(self.processes)}\n{self.dependancies}'
 
 
 class Job:
+    ID = 0
+
     """
     A class to represent a Job.
 
@@ -124,7 +137,7 @@ class Job:
     can_start : Function
         A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
     """
-    def __init__(self, parents=[], can_start=lambda:True):
+    def __init__(self, name=None, parents=[], can_start=lambda:True, log_file=None):
         """
         Constructs all the necessary attributes for the person object.
 
@@ -135,10 +148,17 @@ class Job:
             can_start : Function
                 A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
         """
+        self.name = name if name is not None else f'Job_{Job.ID}'
+        self.log_file = log_file if log_file is not None else f'{self.name}.log'
+        Job.ID += 1
+
         self.parents = parents
         self.is_over = False
         self.process = None
         self.can_start = can_start
+
+    def set_log_file(self, log_file):
+        self.log_file = log_file
 
     def is_ready(self):
         # Already over
@@ -167,7 +187,7 @@ class FunctionJob(Job):
     '''
     A Job class that wrap a function to run in a subprocess.
     '''
-    def __init__(self, func_to_run, func_args=(), parents=[], can_start=lambda:True):
+    def __init__(self, func_to_run, func_args=(), parents=[], can_start=lambda:True, name=None, log_file=None):
         '''
             Parameters
             ----------
@@ -180,10 +200,26 @@ class FunctionJob(Job):
             can_start : Function
                 A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
         '''
-        super().__init__(parents=parents, can_start=can_start)
+        name = name if name is not None else f'FunctionJob_{Job.ID}'
+        log_file = log_file if log_file is not None else f'{name}.log'
+        super().__init__(parents=parents, can_start=can_start, name=name, log_file=f'{name}.log')
         self.to_run = func_to_run
         self.args = func_args
-        self.process = Process(target=func_to_run, args=func_args)
+        self.process = Process(target=self.wrapping_function, args=())
+
+
+    def wrapping_function(self):
+        with open(self.log_file, 'w') as fw:
+            sys.stdout = fw
+            sys.stderr = fw
+            print(f'Starting {self.to_run.__name__} with args {self.args}', file=fw)
+            try:
+                self.to_run(*self.args)
+                print(f'Finished {self.to_run.__name__} with args {self.args}', file=fw)
+            except Exception as e:
+                print(f'Error in {self.to_run.__name__} with args {self.args}', file=fw)
+                print(e, file=fw)
+                raise e
 
     def start(self):
         self.process.start()
@@ -223,7 +259,7 @@ class CmdLineJob(Job):
     '''
     A Job class that wrap a command line to run in a subprocess.
     '''
-    def __init__(self, command_line, parents=[], can_start=lambda:True):
+    def __init__(self, command_line, parents=[], can_start=lambda:True, name=None, log_file=None):
         '''
             Parameters
             ----------
@@ -234,11 +270,14 @@ class CmdLineJob(Job):
             can_start : Function
                 A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
         '''
-        super().__init__(parents=parents, can_start=can_start)
+        name = name if name is not None else f'CmdLineJob_{Job.ID}'
+        log_file = log_file if log_file is not None else f'{name}.log'
+        super().__init__(parents=parents, can_start=can_start, name=name, log_file=log_file)
         self.cmd = command_line
 
     def start(self):
-        self.process = subprocess.Popen(self.cmd, shell=True)
+        with open(self.log_file, 'w') as fw:
+            self.process = subprocess.Popen(self.cmd, shell=True, stdout=fw, stderr=fw)
 
     def stop(self):
         self.is_over = True

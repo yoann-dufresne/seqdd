@@ -1,4 +1,5 @@
 from os import path, makedirs
+from shutil import rmtree
 from sys import stderr
 import subprocess
 import time
@@ -10,11 +11,12 @@ from seqdd.utils.scheduler import JobManager
 
 class DownloadManager:
 
-    def __init__(self, register, bindir='bin', tmpdir='/tmp'):
+    def __init__(self, register, logger, bindir='bin', tmpdir='/tmp'):
         self.register = register
         self.bindir = bindir
         self.tmpdir = tmpdir
         self.downloaders = {}
+        self.logger = logger
         
         self.init_downloaders()
 
@@ -26,17 +28,21 @@ class DownloadManager:
         self.downloaders['url'] = url.URL(self.tmpdir, self.bindir)
 
 
-    def download_to(self, datadir, max_process=8):
+    def download_to(self, datadir, logdir, max_process=8):
         """
         Downloads datasets from different sources to the specified data directory.
 
         Args:
             datadir (str): The path to the data directory where the datasets will be downloaded.
+            logdir (str): The path to the log directory where the log files will be stored.
             max_process (int, optional): The maximum number of processes to use for downloading. Defaults to 8.
 
         """
-        # Creates the data directory if it doesn't exist
+        # Creates the tmp and data directory if it doesn't exist
         makedirs(datadir, exist_ok=True)
+        if logdir is not None and path.exists(logdir):
+            rmtree(logdir)
+        makedirs(logdir)
 
         # Create a dictionary to store the jobs for each source
         jobs = {source: [] for source in self.register.subregisters}
@@ -49,12 +55,12 @@ class DownloadManager:
                     downloader = self.downloaders[source]
                     if downloader.is_ready():
                         jobs[source] = downloader.jobs_from_accessions(reg, datadir)
-                        print(f'{len(reg)} datasets from {source} will be downloaded.')
+                        self.logger.info(f'{len(reg)} datasets from {source} will be downloaded.')
                     else:
-                        print(f'{source} datasets cannot be downloaded because the downloader is not ready. Skipping {len(reg)} datasets.', file=stderr)
+                        self.logger.warning(f'{source} datasets cannot be downloaded because the downloader is not ready. Skipping {len(reg)} datasets.', file=stderr)
 
         # Create a JobManager instance
-        manager = JobManager(max_process=max_process)
+        manager = JobManager(max_process=max_process, log_folder=logdir, logger=self.logger)
         manager.start()
 
         # Add jobs to the JobManager in an interleaved way.
@@ -64,11 +70,9 @@ class DownloadManager:
         while total_jobs > 0:
             for source in jobs:
                 if idxs[source] < len(jobs[source]):
-                    manager.add_process(jobs[source][idxs[source]])
+                    manager.add_job(jobs[source][idxs[source]])
                     idxs[source] += 1
                     total_jobs -= 1
-
-        print(manager)
 
         # Wait for all jobs to complete
         while manager.remaining_jobs() > 0:
@@ -90,7 +94,7 @@ def check_binary(path_to_bin):
     """
     try:
         cmd = f'{path_to_bin} --version'
-        ret = subprocess.run(cmd.split(' '))
+        ret = subprocess.run(cmd.split(' '), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return ret.returncode == 0
     except FileNotFoundError:
         return False

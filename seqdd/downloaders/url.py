@@ -32,7 +32,7 @@ class URL:
         if locked:
             ready = time.time() - self.last_query > self.min_delay
             if ready:
-                last_query = time.time()
+                self.last_query = time.time()
             self.query_lock.release()
             return ready
         return False
@@ -48,9 +48,10 @@ class URL:
             # Get the filename from the server
             filename = self.get_filename(url)
             filepath = path.join(datadir, f'url{idx}_{filename}')
+            job_name = f'url_{filename}'
 
             # Make the download
-            jobs.append(CmdLineJob(f'curl -o {filepath} "{url}"', can_start=self.url_delay_ready))
+            jobs.append(CmdLineJob(f'curl -o {filepath} "{url}"', can_start=self.url_delay_ready, name=job_name))
 
         return jobs
     
