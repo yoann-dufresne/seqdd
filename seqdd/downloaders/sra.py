@@ -1,6 +1,6 @@
-from os import listdir, makedirs, path, remove, rename
+from os import listdir, makedirs, path, remove
 import platform
-from shutil import rmtree
+from shutil import rmtree, move
 import subprocess
 from sys import stderr
 from threading import Lock
@@ -53,22 +53,23 @@ class SRA:
         # Each dataset download is independant
         for acc in accessions:
             tmp_dir = path.join(self.tmpdir, acc)
+            job_name = f'sra_{acc}'
 
             # Prefetch data
             cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {tmp_dir} {acc}'
-            prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready)
+            prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
 
             # Split files
             accession_dir = path.join(tmp_dir, acc)
             cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
-            fasterqdump_job = CmdLineJob(cmd, parents=[prefetch_job], can_start=self.sra_delay_ready)
+            fasterqdump_job = CmdLineJob(cmd, parents=[prefetch_job], can_start=self.sra_delay_ready, name=f'{job_name}_fasterqdump')
             
             # Compress files
             cmd = f'gzip {path.join(accession_dir, "*.fastq")}'
-            compress_job = CmdLineJob(cmd, parents=[fasterqdump_job])
+            compress_job = CmdLineJob(cmd, parents=[fasterqdump_job], name=f'{job_name}_compress')
 
             # Move to datadir and clean tmpdir
-            clean_job = FunctionJob(self.move_and_clean, func_args=(accession_dir, datadir, tmp_dir), parents=[compress_job])
+            clean_job = FunctionJob(self.move_and_clean, func_args=(accession_dir, datadir, tmp_dir), parents=[compress_job], name=f'{job_name}_clean')
 
             # Set the jobs
             jobs.extend((prefetch_job, fasterqdump_job, compress_job, clean_job))
@@ -80,7 +81,7 @@ class SRA:
         # Enumarates all the files from the accession directory
         for filename in listdir(accession_dir):
             if filename.endswith('.gz'):
-                rename(path.join(accession_dir, filename), path.join(outdir, filename))
+                move(path.join(accession_dir, filename), path.join(outdir, filename))
 
         # Clean the directory
         rmtree(tmpdir)

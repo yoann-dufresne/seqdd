@@ -1,6 +1,6 @@
-from os import listdir, makedirs, path, remove, rename
+from os import listdir, makedirs, path
 import platform
-from shutil import rmtree
+from shutil import rmtree, move
 import subprocess
 from sys import stderr
 from threading import Lock
@@ -57,17 +57,17 @@ class NCBI:
 
             # Download dehydrated job
             download_file = path.join(tmp_dir, f'{job_name}.zip')
-            download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --filename {download_file} {' '.join(acc_slice)}", can_start=self.ncbi_delay_ready)
+            download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --filename {download_file} {' '.join(acc_slice)}", can_start=self.ncbi_delay_ready, name=f'{job_name}_download')
             
             # Unzip Job
             unzip_dir = path.join(tmp_dir, job_name)
-            unzip_job = CmdLineJob(f"unzip {download_file} -d {unzip_dir}", parents=[download_job])
+            unzip_job = CmdLineJob(f"unzip {download_file} -d {unzip_dir}", parents=[download_job], name=f'{job_name}_unzip')
 
             # Data download
-            rehydrate_job = CmdLineJob(f"{self.bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job], can_start=self.ncbi_delay_ready)
+            rehydrate_job = CmdLineJob(f"{self.bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job], can_start=self.ncbi_delay_ready, name=f'{job_name}_rehydrate')
 
             # Data reorganization
-            reorg_job = FunctionJob(self.clean, func_args=(unzip_dir, dest_dir, tmp_dir), parents=[rehydrate_job])
+            reorg_job = FunctionJob(self.clean, func_args=(unzip_dir, dest_dir, tmp_dir), parents=[rehydrate_job], name=f'{job_name}_clean')
 
             all_jobs.extend([download_job, unzip_job, rehydrate_job, reorg_job])
 
@@ -88,7 +88,7 @@ class NCBI:
                     if file.endswith(".gz"):
                         filepath = path.join(subpath, file)
                         # Move the data to its final destination
-                        rename(filepath, path.join(dest_dir, file))
+                        move(filepath, path.join(dest_dir, file))
 
         # Clean the download directory
         rmtree(tmp_dir)

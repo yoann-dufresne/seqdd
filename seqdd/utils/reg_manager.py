@@ -46,12 +46,34 @@ def create_register(dirpath, force=False):
 
 
 class Register:
+    """
+    A class representing a register. It is composed of subregisters from different sources (NCBI genomes, SRA, diverse urls).
 
+    Attributes:
+        major_version (int): The major version of the register.
+        minor_version (int): The minor version of the register.
+        subregisters (dict): A dictionary containing the subregisters.
+
+    Methods:
+        __init__(dirpath=None, regfile=None): Initializes a Register object.
+        load_from_dir(dirpath): Loads subregisters from a directory.
+        save_to_dir(dirpath): Saves subregisters to a directory.
+        save_to_file(file): Saves the register to a file.
+        load_from_file(file): Loads the register from a file.
+        __repr__(): Returns a string representation of the Register object.
+    """
 
     major_version = 0
     minor_version = 0
 
     def __init__(self, dirpath=None, regfile=None):
+        """
+        Initializes a Register object.
+
+        Args:
+            dirpath (str, optional): The directory path to load subregisters from. Defaults to None.
+            regfile (str, optional): The file path to load the register from. Defaults to None.
+        """
         self.subregisters = {
             'ncbi': set(),
             'sra': set(),
@@ -65,6 +87,15 @@ class Register:
             self.load_from_file(regfile)
 
     def load_from_dir(self, dirpath):
+        """
+        Loads subregisters from a directory.
+
+        Args:
+            dirpath (str): The directory path to load subregisters from.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
         if not path.isdir(dirpath):
             return False
 
@@ -79,6 +110,15 @@ class Register:
         return True
 
     def save_to_dir(self, dirpath):
+        """
+        Saves subregisters to a directory.
+
+        Args:
+            dirpath (str): The directory path to save subregisters to.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
         if not path.isdir(dirpath):
             return False
 
@@ -92,6 +132,12 @@ class Register:
         return True
 
     def save_to_file(self, file):
+        """
+        Saves the register to a file.
+
+        Args:
+            file (str): The file path to save the register to.
+        """
         with open(file, 'w') as fw:
             print(f'version {Register.major_version}.{Register.minor_version}', file=fw)
             # Iterate over all the subregisters
@@ -102,6 +148,12 @@ class Register:
                     print('\n'.join(self.subregisters[key]), file=fw)
 
     def load_from_file(self, file):
+        """
+        Loads the register from a file.
+
+        Args:
+            file (str): The file path to load the register from.
+        """
         with open(file) as fr:
             # Version check
             prefix, version = fr.readline().strip().split(' ')
@@ -133,4 +185,10 @@ class Register:
                     remaining_to_read -= 1
 
     def __repr__(self):
+        """
+        Returns a string representation of the Register object.
+
+        Returns:
+            str: A string representation of the Register object.
+        """
         return '\n'.join(f'{sub} : [{", ".join(self.subregisters[sub])}]' for sub in self.subregisters)

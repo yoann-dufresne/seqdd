@@ -2,6 +2,7 @@ import argparse
 from os import path
 import platform
 from sys import stderr
+import logging
 
 from seqdd.utils.reg_manager import load_source, save_source, create_register, Register
 from seqdd.downloaders.download import DownloadManager
@@ -13,8 +14,8 @@ def parse_cmd():
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
                     epilog='Reproducibility is crutial, let\'s try to improve it!')
-    parser.add_argument('--register-location', default='.register', help='Directory that store all info for the register')
     subparsers = parser.add_subparsers(dest='cmd', required=True, help='command to apply')
+
 
     # Init register command
     init = subparsers.add_parser('init', help='Initialise the data register')
@@ -33,25 +34,31 @@ def parse_cmd():
     download.add_argument('-d', '--download-directory', default='data', help='Directory where all the data will be downloaded')
     download.add_argument('-p', '--max-processes', type=int, default=8, help='Maximum number of processes to run in parallel.')
     download.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
+    download.add_argument('--log-directory', default='logs', help='Directory where all the logs will be stored')
 
     # Export the register
     export = subparsers.add_parser('export', help='Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.')
     export.add_argument('-o', '--output-register', type=str, default='myregister.reg', help='Name of the register file. Please prefer filenames .reg terminated.')
+    
+    # Shared arguments
+    for subparser in subparsers.choices.values():
+        subparser.add_argument('-l', '--register-location', default='.register', help='Directory that store all info for the register')
 
     args = parser.parse_args()
     return args
 
 
-def on_init(args):
-    print('Init register')
+def on_init(args, logger):
+    logger.info('Init register')
     location = args.register_location
     register = create_register(location, force=args.force)
     if args.register_file is not None:
         register.load_from_file(args.register_file)
         register.save_to_dir(location)
+    logger.info(f'Created at location {args.register_location}')
 
 
-def on_add(args):
+def on_add(args, logger):
     # Getting the file to the sources
     src_path = path.join(args.register_location, f"{args.source}.txt")
 
@@ -80,13 +87,13 @@ def on_add(args):
         save_source(src_path, accessions)
 
 
-def on_download(args):
+def on_download(args, logger):
     reg = Register(dirpath=args.register_location)
-    dm = DownloadManager(reg, path.join(args.register_location, 'bin'), args.tmp_directory)
-    dm.download_to(args.download_directory, args.max_processes)
+    dm = DownloadManager(reg, logger, path.join(args.register_location, 'bin'), args.tmp_directory)
+    dm.download_to(args.download_directory, args.log_directory , args.max_processes)
 
 
-def on_export(args):
+def on_export(args, logger):
     reg = Register(dirpath=args.register_location)
     reg.save_to_file(args.output_register)
 
@@ -106,9 +113,18 @@ def main():
             print('No data register found. Please first run the init command.', file=stderr)
             exit(1)
 
+    # Setup the logger
+    logger = logging.getLogger('seqdd')
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('[%(asctime)s - %(levelname)s] %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     # Apply the right command
     cmd_to_apply = globals()[f"on_{args.cmd}"]
-    cmd_to_apply(args)
+    cmd_to_apply(args, logger=logger)
 
 if __name__ == "__main__":
     main()
