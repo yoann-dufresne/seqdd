@@ -25,20 +25,20 @@ def save_source(sourcepath, accessions):
             print(acc, file=fw)
 
 
-def create_register(dirpath, force=False):
+def create_register(dirpath, logger, force=False):
     # Remove files if force reconstruction
     if force and path.exists(dirpath):
         rmtree(dirpath)
 
     # Already existing register ?
     if path.exists(dirpath):
-        print(f"A register is already present at location {dirpath}", file=stderr)
+        logger.critical(f"A register is already present at location {dirpath}")
         exit(1)
 
     # Creates the directory if needed
     makedirs(dirpath, exist_ok=True)
     # Creates the subregisters
-    reg = Register()
+    reg = Register(logger)
     # Save the subregisters
     reg.save_to_dir(dirpath)
 
@@ -66,7 +66,7 @@ class Register:
     major_version = 0
     minor_version = 0
 
-    def __init__(self, dirpath=None, regfile=None):
+    def __init__(self, logger, dirpath=None, regfile=None):
         """
         Initializes a Register object.
 
@@ -79,6 +79,8 @@ class Register:
             'sra': set(),
             'url': set()
         }
+
+        self.logger = logger
 
         if dirpath is not None:
             self.load_from_dir(dirpath)
@@ -97,6 +99,7 @@ class Register:
             bool: True if successful, False otherwise.
         """
         if not path.isdir(dirpath):
+            self.logger.warning(f"Register {dirpath} does not exist.")
             return False
 
         # Iterate over all the subregisters
@@ -107,6 +110,7 @@ class Register:
                 # Load a subregister from its file
                 self.subregisters[key].update(load_source(src_path))
 
+        self.logger.debug(f'Register loaded from {dirpath}')
         return True
 
     def save_to_dir(self, dirpath):
@@ -120,6 +124,7 @@ class Register:
             bool: True if successful, False otherwise.
         """
         if not path.isdir(dirpath):
+            self.logger.error(f"Register {dirpath} does not exist. Save aborted...")
             return False
 
         # Iterate over all the subregisters
@@ -129,6 +134,7 @@ class Register:
                 # Save a subregister to its file
                 save_source(src_path, self.subregisters[key])
 
+        self.logger.debug(f'Register saved to {dirpath}')
         return True
 
     def save_to_file(self, file):
@@ -147,6 +153,8 @@ class Register:
                     # Save the list of accessions
                     print('\n'.join(self.subregisters[key]), file=fw)
 
+        self.logger.debug(f'Datasets saved to register file {file}')
+
     def load_from_file(self, file):
         """
         Loads the register from a file.
@@ -158,14 +166,14 @@ class Register:
             # Version check
             prefix, version = fr.readline().strip().split(' ')
             if prefix != 'version':
-                print('Missing version number at the beginning of the reg file. Skipping...', file=stderr)
+                self.logger.error('Missing version number at the beginning of the reg file. Skipping the loading')
                 return
             major, minor = (int(x) for x in version.split('.'))
             if major != self.major_version:
-                print(f'Incompatible versions. Your register is major version {major} while the tool awaits version {Register.major_version}. Skipping...', file=stderr)
+                self.logger.error(f'Incompatible versions. Your register is major version {major} while the tool awaits version {Register.major_version}. Skipping the loading')
                 return
             if minor > Register.minor_version:
-                print(f'Incompatible versions. Your register is major version {major}.{minor} while the tool awaits maximum version {Register.major_version}.{Register.minor_version} . Skipping...', file=stderr)
+                self.logger.error(f'Incompatible versions. Your register is major version {major}.{minor} while the tool awaits maximum version {Register.major_version}.{Register.minor_version} . Skipping the loading')
                 return
             
             # Remaining line to read until the end of the current subregister
@@ -183,6 +191,8 @@ class Register:
                 else :
                     self.subregisters[current_register].add(line)
                     remaining_to_read -= 1
+
+        self.logger.debug(f'Data from {file} successfully loaded')
 
     def __repr__(self):
         """

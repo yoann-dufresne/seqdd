@@ -10,9 +10,10 @@ from seqdd.utils.scheduler import CmdLineJob
 
 class URL:
 
-    def __init__(self, tmpdir, bindir):
+    def __init__(self, tmpdir, bindir, logger):
         self.tmpdir = tmpdir
         self.bindir = bindir
+        self.logger = logger
         # Limiting query per second
         self.query_lock = Lock()
         self.min_delay = .5
@@ -91,8 +92,7 @@ class URL:
         for url in urls:
             scheme = url[:url.find(':')].lower()
             if scheme not in curl_schemes:
-                print(f'WARNING: scheme {scheme} not supported.', file=stderr)
-                print(f'url ignored: {url}', file=stderr)
+                self.logger.warning(f'WARNING: scheme {scheme} not supported.\nurl ignored: {url}')
 
             # Wait a delay to not DDOS servers
             while not self.url_delay_ready():
@@ -112,7 +112,7 @@ class URL:
                     if code == 200:
                         valid_urls.add(url)
                     else:
-                        print(f'ERROR: {url}\nCannot donwload from this url. Error code: {code}\nSkipping...', file=stderr)
+                        self.logger.error(f'{url}\nCannot donwload from this url. Error code: {code}\nSkipping...')
                     break
         return valid_urls
 

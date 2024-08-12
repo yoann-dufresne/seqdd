@@ -42,7 +42,7 @@ def parse_cmd():
     
     # Shared arguments
     for subparser in subparsers.choices.values():
-        subparser.add_argument('-l', '--register-location', default='.register', help='Directory that store all info for the register')
+        subparser.add_argument('--register-location', default='.register', help='Directory that store all info for the register')
 
     args = parser.parse_args()
     return args
@@ -51,7 +51,7 @@ def parse_cmd():
 def on_init(args, logger):
     logger.info('Init register')
     location = args.register_location
-    register = create_register(location, force=args.force)
+    register = create_register(location, logger, force=args.force)
     if args.register_file is not None:
         register.load_from_file(args.register_file)
         register.save_to_dir(location)
@@ -76,11 +76,12 @@ def on_add(args, logger):
 
     # Verification of the accessions
     classes = {'ncbi': ncbi.NCBI, 'sra':sra.SRA, 'url': url.URL}
-    validator = classes[args.source](tmpdir=args.tmp_directory, bindir=path.join(args.register_location, 'bin'))
+    validator = classes[args.source](tmpdir=args.tmp_directory, bindir=path.join(args.register_location, 'bin'), logger=logger)
     valid_accessions = validator.filter_valid_accessions(frozenset(args.accessions))
     
     # Add valid accessions
     accessions.update(valid_accessions)
+    logger.info(f"{len(accessions) - size_before} accessions added to the register")
 
     # Save the register
     if len(accessions) > size_before:
@@ -88,13 +89,13 @@ def on_add(args, logger):
 
 
 def on_download(args, logger):
-    reg = Register(dirpath=args.register_location)
+    reg = Register(logger, dirpath=args.register_location)
     dm = DownloadManager(reg, logger, path.join(args.register_location, 'bin'), args.tmp_directory)
     dm.download_to(args.download_directory, args.log_directory , args.max_processes)
 
 
 def on_export(args, logger):
-    reg = Register(dirpath=args.register_location)
+    reg = Register(logger, dirpath=args.register_location)
     reg.save_to_file(args.output_register)
 
 
