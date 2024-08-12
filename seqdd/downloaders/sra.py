@@ -13,9 +13,10 @@ from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
 class SRA:
 
-    def __init__(self, tmpdir, bindir):
+    def __init__(self, tmpdir, bindir, logger):
         self.tmpdir = tmpdir
         self.bindir = bindir
+        self.logger = logger
         self.binaries = self.download_sra_toolkit()
         
         self.mutex = Lock()
@@ -43,7 +44,7 @@ class SRA:
         return ready
     
     def filter_valid_accessions(self, accessions):
-        print('TODO: Validate sra accessions...')
+        # print('TODO: Validate sra accessions...')
         return accessions
 
     
@@ -126,8 +127,7 @@ class SRA:
 
         # Message to potential system extensions
         if not supported:
-            print('sratoolkit auto-install is not yet supported on your system. SRA downloader has not been installed... Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:', file=stderr)
-            print(f'system={system}\tplateform={platform.machine()}', file=stderr)
+            self.logger.critical(f'sratoolkit auto-install is not yet supported on your system. SRA downloader has not been installed... Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:\nsystem={system}\tplateform={platform.machine()}')
             return None
 
         # Download sra toolkit
@@ -135,11 +135,13 @@ class SRA:
         makedirs(tmp_dir, exist_ok=True)
         tarpath = path.join(tmp_dir, tarname)
 
+        self.logger.info('Download the sratoolkit binnary...')
+
         cmd = f'curl -o {tarpath} {download_link}'
         ret = subprocess.run(cmd.split())
 
         if ret.returncode != 0:
-            print('Impossible to automatically download sratoolkit. SRA downloader has not been installed...', file=stderr)
+            self.logger.error('Impossible to automatically download sratoolkit. SRA downloader has not been installed...')
             return None
 
         # Uncompress the archive
@@ -148,7 +150,7 @@ class SRA:
         remove(tarpath)
 
         if ret.returncode != 0:
-            print('Impossible to expand the sratoolkit tar.gz on your system.', file=stderr)
+            self.logger.error('Impossible to expand the sratoolkit tar.gz on your system.')
             return None
 
         # Create links to the bins
@@ -157,7 +159,7 @@ class SRA:
         cmd = f'ln -s {prefetch_bin} {prefetch_ln}'
         ret = subprocess.run(cmd.split())
         if ret.returncode != 0:
-            print(f'Impossible to create symbolic link {prefetch_ln}. SRA downloader has not been installed...', file=stderr)
+            self.logger.error(f'Impossible to create symbolic link {prefetch_ln}. SRA downloader has not been installed...')
             return None
 
         fasterqdump_bin = path.abspath(path.join(self.bindir, dirname, 'bin', 'fasterq-dump'))
@@ -165,8 +167,10 @@ class SRA:
         cmd = f'ln -s {fasterqdump_bin} {fasterqdump_ln}'
         ret = subprocess.run(cmd.split())
         if ret.returncode != 0:
-            print(f'Impossible to create symbolic link {fasterqdump_ln}. SRA downloader has not been installed...', file=stderr)
+            self.logger.error(f'Impossible to create symbolic link {fasterqdump_ln}. SRA downloader has not been installed...')
             return None
+        
+        self.logger.error(f'SRA downloader binaries installed at {self.bindir}')
 
         return {
             'prefetch' : prefetch_ln,

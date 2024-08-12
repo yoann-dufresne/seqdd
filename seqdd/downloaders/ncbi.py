@@ -14,9 +14,10 @@ import json
 class NCBI:
     ncbi_joib_id = 0
 
-    def __init__(self, tmpdir, bindir):
+    def __init__(self, tmpdir, bindir, logger):
         self.tmp_dir = tmpdir
         self.bin_dir = bindir
+        self.logger = logger
         self.mutex = Lock()
 
         self.bin = self.get_download_software()
@@ -57,7 +58,7 @@ class NCBI:
 
             # Download dehydrated job
             download_file = path.join(tmp_dir, f'{job_name}.zip')
-            download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --filename {download_file} {' '.join(acc_slice)}", can_start=self.ncbi_delay_ready, name=f'{job_name}_download')
+            download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --no-progressbar --filename {download_file} {' '.join(acc_slice)}", can_start=self.ncbi_delay_ready, name=f'{job_name}_download')
             
             # Unzip Job
             unzip_dir = path.join(tmp_dir, job_name)
@@ -107,13 +108,12 @@ class NCBI:
             archive_path = path.join(tmp_path, 'accessions.zip')
 
             # Download the accessions info
-            cmd = f'{self.bin} download genome accession {" ".join(accessions_slice)} --include none --filename {archive_path}'
+            cmd = f'{self.bin} download genome accession {" ".join(accessions_slice)} --no-progressbar --include none --filename {archive_path}'
             ret = subprocess.run(cmd.split())
 
             # Check download status
             if ret.returncode != 0:
-                print(f'Datasets software error while downloading the accessions info: {ret.stderr}', file=stderr)
-                print(f'Skipping the validation of the accessions: {accessions_slice}', file=stderr)
+                self.logger.error(f'Datasets software error while downloading the accessions info: {ret.stderr}\nSkipping the validation of the accessions: {accessions_slice}')
                 rmtree(tmp_path)
                 continue
 
@@ -124,8 +124,7 @@ class NCBI:
 
             # Check unzip status
             if ret.returncode != 0:
-                print(f'Impossible to unzip the accessions info: {archive_path}', file=stderr)
-                print(f'Skipping the validation of the accessions: {accessions_slice}', file=stderr)
+                self.logger.error(f'Impossible to unzip the accessions info: {archive_path}\nSkipping the validation of the accessions: {accessions_slice}')
                 rmtree(tmp_path)
                 continue
 
@@ -144,8 +143,7 @@ class NCBI:
         # Print the list of invalid accessions
         invalid_accessions = accessions - valid_accessions
         if len(invalid_accessions) > 0:
-            print(f'The following accessions are skipped: {", ".join(list(invalid_accessions))}', file=stderr)
-            print('Those accessions will be ignored.', file=stderr)
+            self.logger.warning(f'The following accessions are skipped: {", ".join(list(invalid_accessions))}\nThose accessions will be ignored.')
 
         return valid_accessions
     
@@ -183,12 +181,11 @@ class NCBI:
 
         # Message to potential system extensions
         if not supported:
-            print('ncbi datasets auto-install is not yet supported on your system. Plese install ncbi datasets cli by yourself. Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:', file=stderr)
-            print(f'system={system}\tplateform={platform.machine()}', file=stderr)
+            self.logger.error(f'ncbi datasets auto-install is not yet supported on your system. Plese install ncbi datasets cli by yourself. Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:\nsystem={system}\tplateform={platform.machine()}')
             return None
 
         # Download datasets
-        print('Download the ncbi datasets cli binnary...')
+        self.logger.info('Download the ncbi datasets cli binnary...')
         
         # Prepare the bin directory
         download_dir = path.abspath(self.bin_dir)
@@ -205,13 +202,14 @@ class NCBI:
             if ret.returncode == 0:
                 # move the binary to the bin directory
                 final_path = path.abspath(path.join(self.bin_dir, 'datasets'))
-                rename(binpath, final_path) 
+                move(binpath, final_path)
+                self.logger.info(f'ncbi datasets cli installed at {final_path}')
 
                 return f'{final_path}'
             else:
-                print(f'Impossible to change the exec rights for {binpath}. Automatic download of ncbi datasets cli is aborted. Please install it by yourself.', file=stderr)
+                self.logger.error(f'Impossible to change the exec rights for {binpath}. Automatic download of ncbi datasets cli is aborted. Please install it by yourself.')
         else:
-            print('Impossible to automatically download ncbi datasets cli. Please install it by yourself.', file=stderr)
+            self.logger.error('Impossible to automatically download ncbi datasets cli. Please install it by yourself.')
 
         return None
     
