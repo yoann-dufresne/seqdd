@@ -1,6 +1,7 @@
 import argparse
 from os import path
 import platform
+import re
 from sys import stderr
 import logging
 
@@ -39,6 +40,16 @@ def parse_cmd():
     # Export the register
     export = subparsers.add_parser('export', help='Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.')
     export.add_argument('-o', '--output-register', type=str, default='myregister.reg', help='Name of the register file. Please prefer filenames .reg terminated.')
+
+    # List the datasets from the register
+    lst = subparsers.add_parser('list', help='List all the datasets from the register. Subregisters are listed one after the other. 5 accessions are displayed per line (tabulation separated).')
+    lst.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='List only the datasets from the given source. If not specified, list all the datasets.')
+    lst.add_argument('-r', '--regular-expressions', nargs='+', default=[''], help='List only the datasets accessions that match at least one of the given regular expressions')
+
+    # Delete accessions from the register
+    remove = subparsers.add_parser('remove', help='Remove dataset(s) from the register')
+    remove.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='Delete only from the given source. If not specified, removed from all the sources.')
+    remove.add_argument('-a', '--accessions', nargs='+', help='List of accessions to remove from the register. Each accession can be a regular expression.')
     
     # Shared arguments
     for subparser in subparsers.choices.values():
@@ -46,6 +57,47 @@ def parse_cmd():
 
     args = parser.parse_args()
     return args
+
+
+def on_remove(args, logger):
+     # validate the regexps
+    valid_regexp = []
+    for regexp in args.accessions:
+        try:
+            re.compile(regexp)
+            valid_regexp.append(regexp)
+        except re.error:
+            logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
+
+    reg = Register(logger, dirpath=args.register_location)
+    src_names = reg.subregisters.keys() if args.source is None else args.source
+    for name in src_names:
+        acc_lst = reg.filter_accessions(name, valid_regexp)
+        for acc in acc_lst:
+            reg.remove_accession(name, acc)
+    reg.save_to_dir(args.register_location)
+
+
+def on_list(args, logger):
+    # validate the regexps
+    valid_regexp = []
+    for regexp in args.regular_expressions:
+        try:
+            re.compile(regexp)
+            valid_regexp.append(regexp)
+        except re.error:
+            logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
+
+    reg = Register(logger, dirpath=args.register_location)
+    src_names = reg.subregisters.keys() if args.source is None else args.source
+    for name in src_names:
+        acc_lst = reg.filter_accessions(name, valid_regexp)
+
+        if len(acc_lst) > 0:
+            print(f"- {name}:")
+            for idx in range(0, len(acc_lst), 5):
+                current_slice = acc_lst[idx:idx+5]
+                print("\t".join(current_slice))
 
 
 def on_init(args, logger):

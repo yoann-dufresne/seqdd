@@ -1,6 +1,3 @@
-* [ONGOING] Add a logger: Print all the infos into various log files.
-* List what is inside of the registrer
-* Delete elements from the register
 * Use the output of datasets on wrong accession number to remove the bad accessions only
 * Saving already downloaded files: Create a downloaded files register to avoid downloading multiple time the same file.
 * Add url support for s3

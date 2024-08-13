@@ -1,5 +1,6 @@
+import re
 from sys import stderr
-from os import path, makedirs
+from os import path, makedirs, remove
 from shutil import rmtree
 
 
@@ -133,6 +134,9 @@ class Register:
             if len(self.subregisters[key]) > 0:
                 # Save a subregister to its file
                 save_source(src_path, self.subregisters[key])
+            elif path.exists(src_path):
+                # Remove the file if the subregister is empty
+                remove(src_path)
 
         self.logger.debug(f'Register saved to {dirpath}')
         return True
@@ -193,6 +197,43 @@ class Register:
                     remaining_to_read -= 1
 
         self.logger.debug(f'Data from {file} successfully loaded')
+
+    
+    def remove_accession(self, source, accession):
+        """
+        Removes an accession from a source.
+
+        Args:
+            source (str): The source to remove the accession from.
+            accession (str): The accession to remove.
+        """
+        if source not in self.subregisters:
+            self.logger.error(f"Source {source} not found in the register.")
+            return
+
+        if accession in self.subregisters[source]:
+            self.subregisters[source].remove(accession)
+            self.logger.info(f"Accession {accession} removed from {source}")
+        else:
+            self.logger.warning(f"Accession {accession} not found in {source}")
+
+
+    def filter_accessions(self, source, regexps):
+        """ Returns the accessions from a given source that match at least one of the regexps.
+
+        Args:
+            source (str): The source to filter.
+            regexps (list): A list of regular expressions.
+
+        Returns:
+            list: A list of accessions from the source that match at least one of the regexps.
+        """
+        if source not in self.subregisters:
+            self.logger.error(f"Source {source} not found in the register.")
+            return []
+
+        return [acc for acc in self.subregisters[source] if any(re.match(regexp, acc) for regexp in regexps)]
+
 
     def __repr__(self):
         """
