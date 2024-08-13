@@ -97,6 +97,7 @@ def on_download(args, logger):
 def on_export(args, logger):
     reg = Register(logger, dirpath=args.register_location)
     reg.save_to_file(args.output_register)
+    logger.info(f"Register exported to {args.output_register}")
 
 
 def main():

@@ -12,9 +12,40 @@ import json
 
 
 class NCBI:
+    """
+    The NCBI class represents a data downloader for the National Center for Biotechnology Information (NCBI) database.
+
+    Attributes:
+        ncbi_joib_id (int): The ID counter for NCBI jobs.
+        tmp_dir (str): The temporary directory path.
+        bin_dir (str): The binary directory path.
+        logger: The logger object for logging messages.
+        mutex: The mutex lock for thread synchronization.
+        bin (str): The path to the NCBI download software.
+        last_ncbi_query (float): The timestamp of the last NCBI query.
+
+    Methods:
+        __init__(self, tmpdir, bindir, logger): Initializes a new instance of the NCBI class.
+        is_ready(self): Checks if the NCBI download software is ready.
+        ncbi_delay_ready(self): Checks if the minimum delay between NCBI queries has passed.
+        jobs_from_accessions(self, accessions, dest_dir): Generates a list of jobs for downloading and processing accessions.
+        clean(self, unzip_dir, dest_dir, tmp_dir): Cleans up the downloaded files and moves them to the destination directory.
+        filter_valid_accessions(self, accessions): Filters and validates a list of accessions.
+        get_download_software(self): Checks if the NCBI download software is installed and returns the path.
+        install_datasets_software(self): Installs the NCBI download software if it is not already installed.
+    """
+
     ncbi_joib_id = 0
 
     def __init__(self, tmpdir, bindir, logger):
+        """
+        Initializes a new instance of the NCBI downloader class.
+
+        Args:
+            tmpdir (str): The temporary directory path.
+            bindir (str): The binary directory path.
+            logger: The logger object for logging messages.
+        """
         self.tmp_dir = tmpdir
         self.bin_dir = bindir
         self.logger = logger
@@ -24,9 +55,21 @@ class NCBI:
         self.last_ncbi_query = 0
 
     def is_ready(self):
+        """
+        Checks if the NCBI download software is ready.
+
+        Returns:
+            bool: True if the software is ready, False otherwise.
+        """
         return self.bin is not None
     
     def ncbi_delay_ready(self):
+        """
+        Checks if the minimum delay between NCBI queries has passed.
+
+        Returns:
+            bool: True if the delay has passed, False otherwise.
+        """
         # Minimal delay between ncbi queries (1s)
         min_delay = 1
         locked = self.mutex.acquire(blocking=False)
@@ -40,7 +83,16 @@ class NCBI:
         return ready
     
     def jobs_from_accessions(self, accessions, dest_dir):
+        """
+        Generates a list of jobs for downloading and processing accessions.
 
+        Args:
+            accessions (list): The list of accessions to download.
+            dest_dir (str): The destination directory path.
+
+        Returns:
+            list: A list of jobs for downloading and processing accessions.
+        """
         accessions = list(accessions)
         all_jobs = []
 
@@ -76,6 +128,14 @@ class NCBI:
 
 
     def clean(self, unzip_dir, dest_dir, tmp_dir):
+        """
+        Cleans up the downloaded files and moves them to the destination directory.
+
+        Args:
+            unzip_dir (str): The directory path where the files are unzipped.
+            dest_dir (str): The destination directory path.
+            tmp_dir (str): The temporary directory path.
+        """
         # Remove subdirectories while moving their content
         data_dir = path.join(unzip_dir, "ncbi_dataset", "data")
 
@@ -95,6 +155,15 @@ class NCBI:
         rmtree(tmp_dir)
 
     def filter_valid_accessions(self, accessions):
+        """
+        Filters and validates a list of accessions.
+
+        Args:
+            accessions (set): The set of accessions to filter and validate.
+
+        Returns:
+            set: The set of valid accessions.
+        """
         accessions_list = list(accessions)
         valid_accessions = set()
 
@@ -119,7 +188,7 @@ class NCBI:
 
             # Unzip the accessions info
             unzip_path = path.join(tmp_path, 'accessions')
-            cmd = f'unzip {archive_path} -d {unzip_path}'
+            cmd = f'unzip -qq {archive_path} -d {unzip_path}'
             ret = subprocess.run(cmd.split())
 
             # Check unzip status
@@ -149,6 +218,12 @@ class NCBI:
     
 
     def get_download_software(self):
+        """
+        Checks if the NCBI download software is installed and returns the path.
+
+        Returns:
+            str: The path to the NCBI download software, or None if it is not installed.
+        """
         # Check if the system has the ncbi datasets cli
         system_installed = check_binary('datasets')
         if system_installed:
@@ -164,6 +239,12 @@ class NCBI:
         return self.install_datasets_software()
 
     def install_datasets_software(self):
+        """
+        Installs the NCBI download software if it is not already installed.
+
+        Returns:
+            str: The path to the installed NCBI download software, or None if installation fails.
+        """
         download_link = ''
         supported = True
 
@@ -207,9 +288,11 @@ class NCBI:
 
                 return f'{final_path}'
             else:
-                self.logger.error(f'Impossible to change the exec rights for {binpath}. Automatic download of ncbi datasets cli is aborted. Please install it by yourself.')
+                # Failed to set executable permissions
+                self.logger.error(f'Failed to set executable permissions for ncbi datasets cli: {binpath}')
         else:
-            self.logger.error('Impossible to automatically download ncbi datasets cli. Please install it by yourself.')
+            # Failed to download ncbi datasets cli
+            self.logger.error(f'Failed to download ncbi datasets cli from: {download_link}')
 
         return None
     

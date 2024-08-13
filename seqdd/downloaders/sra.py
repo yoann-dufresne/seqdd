@@ -12,8 +12,29 @@ from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
 
 class SRA:
+    """
+    The SRA class represents a data downloader for the Sequence Read Archive (SRA) database.
 
+    Attributes:
+        tmpdir (str): The temporary directory path.
+        bindir (str): The binary directory path.
+        logger: The logger object for logging messages.
+        binaries (dict): A dictionary containing the paths to the SRA toolkit binaries.
+        mutex: A lock object for thread synchronization.
+        min_delay (float): The minimum delay between SRA queries in seconds.
+        last_sra_query (float): The timestamp of the last SRA query.
+
+    """
+    
     def __init__(self, tmpdir, bindir, logger):
+        """
+        Initialize the SRA downloader object.
+
+        Args:
+            tmpdir (str): The temporary directory path.
+            bindir (str): The binary directory path.
+            logger: The logger object.
+        """
         self.tmpdir = tmpdir
         self.bindir = bindir
         self.logger = logger
@@ -24,6 +45,12 @@ class SRA:
         self.last_sra_query = 0
 
     def is_ready(self):
+        """
+        Checks if the SRA toolkit binaries are ready for use.
+
+        Returns:
+            bool: True if the binaries are ready, False otherwise.
+        """
         return self.binaries is not None
     
     def sra_delay_ready(self):
@@ -44,14 +71,33 @@ class SRA:
         return ready
     
     def filter_valid_accessions(self, accessions):
+        """
+        Filters the given list of SRA accessions and returns only the valid ones.
+
+        Args:
+            accessions (list): A list of SRA accessions.
+
+        Returns:
+            list: A list of valid SRA accessions.
+        """
         # print('TODO: Validate sra accessions...')
         return accessions
 
     
     def jobs_from_accessions(self, accessions, datadir):
+        """
+        Generates a list of jobs for downloading and processing SRA datasets.
+
+        Args:
+            accessions (list): A list of SRA accessions.
+            datadir (str): The output directory path.
+
+        Returns:
+            list: A list of jobs for downloading and processing SRA datasets.
+        """
         jobs = []
 
-        # Each dataset download is independant
+        # Each dataset download is independent
         for acc in accessions:
             tmp_dir = path.join(self.tmpdir, acc)
             job_name = f'sra_{acc}'
@@ -79,7 +125,15 @@ class SRA:
 
 
     def move_and_clean(self, accession_dir, outdir, tmpdir):
-        # Enumarates all the files from the accession directory
+        """
+        Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
+
+        Args:
+            accession_dir (str): The directory path containing the downloaded files.
+            outdir (str): The output directory path.
+            tmpdir (str): The temporary directory path.
+        """
+        # Enumerate all the files from the accession directory
         for filename in listdir(accession_dir):
             if filename.endswith('.gz'):
                 move(path.join(accession_dir, filename), path.join(outdir, filename))
@@ -88,6 +142,12 @@ class SRA:
         rmtree(tmpdir)
     
     def download_sra_toolkit(self):
+        """
+        Downloads and installs the SRA toolkit if necessary, and returns the paths to the SRA toolkit binaries.
+
+        Returns:
+            dict: A dictionary containing the paths to the SRA toolkit binaries.
+        """
         # Check if the system has the ncbi datasets cli
         prefetch_installed = check_binary('prefetch')
         fasterqdump_installed = check_binary('fasterq-dump')
@@ -112,6 +172,15 @@ class SRA:
         return self.install_sratoolkit()
 
     def install_sratoolkit(self, version='3.1.1'):
+        """
+        Downloads and installs the SRA toolkit with the specified version.
+
+        Args:
+            version (str): The version of the SRA toolkit to install. Default is '3.1.1'.
+
+        Returns:
+            dict: A dictionary containing the paths to the SRA toolkit binaries, or None if installation failed.
+        """
         download_link = ''
         dirname = ''
         supported = True
