@@ -23,9 +23,9 @@ class DownloadManager:
 
     def init_downloaders(self):
         from seqdd.downloaders import url, ncbi, sra
-        self.downloaders['ncbi'] = ncbi.NCBI(self.tmpdir, self.bindir)
-        self.downloaders['sra'] = sra.SRA(self.tmpdir, self.bindir)
-        self.downloaders['url'] = url.URL(self.tmpdir, self.bindir)
+        self.downloaders['ncbi'] = ncbi.NCBI(self.tmpdir, self.bindir, self.logger)
+        self.downloaders['sra'] = sra.SRA(self.tmpdir, self.bindir, self.logger)
+        self.downloaders['url'] = url.URL(self.tmpdir, self.bindir, self.logger)
 
 
     def download_to(self, datadir, logdir, max_process=8):
