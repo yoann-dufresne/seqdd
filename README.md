@@ -21,7 +21,7 @@ Creates a register of 3 datasets. The default location .register is used to stor
 
 ```bash
     seqdd init
-    seqdd add -s ncbi -a GCA_000001635 GCA_003774525.2
+    seqdd add -s ncbi -a GCA_000001635.9 GCA_003774525.2
     seqdd add -s sra -a SRR000001
 ```
 
