@@ -114,7 +114,7 @@ class NCBI:
             
             # Unzip Job
             unzip_dir = path.join(tmp_dir, job_name)
-            unzip_job = CmdLineJob(f"unzip {download_file} -d {unzip_dir}", parents=[download_job], name=f'{job_name}_unzip')
+            unzip_job = CmdLineJob(f"unzip {download_file} -n -d {unzip_dir}", parents=[download_job], name=f'{job_name}_unzip')
 
             # Data download
             rehydrate_job = CmdLineJob(f"{self.bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job], can_start=self.ncbi_delay_ready, name=f'{job_name}_rehydrate')
