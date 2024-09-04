@@ -143,6 +143,7 @@ class URL:
         """
         curl_schemes = set(('http', 'https', 'ftp'))
 
+        print("Filtering URLs...")
         valid_urls = set()
         for url in urls:
             scheme = url[:url.find(':')].lower()
@@ -158,13 +159,27 @@ class URL:
             if res.returncode != 0:
                 continue
 
+            content_length = 0
+            added = False
+            failed = False
+
             for line in res.stdout.split('\n'):
                 if line.startswith('HTTP'):
                     code = int(line.strip().split(' ')[1])
                     if code == 200:
                         valid_urls.add(url)
+                        added = True
                     else:
+                        failed = True
                         self.logger.error(f'{url}\nCannot download from this URL. Error code: {code}\nSkipping...')
                     break
+                elif line.startswith('Content-Length'):
+                    content_length = int(line.split(' ')[1])
+                    break
+
+            # Add the URL if it has a content length, even if there is no HTTP code
+            if not failed and not added and content_length > 0:
+                valid_urls.add(url)
+
         return valid_urls
 
