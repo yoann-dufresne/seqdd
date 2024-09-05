@@ -176,6 +176,7 @@ class NCBI:
             makedirs(tmp_path)
             archive_path = path.join(tmp_path, 'accessions.zip')
 
+            # TODO: Wait the minimum delay between queries
             # Download the accessions info
             cmd = f'{self.bin} download genome accession {" ".join(accessions_slice)} --no-progressbar --include none --filename {archive_path}'
             ret = subprocess.run(cmd.split())
