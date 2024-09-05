@@ -7,7 +7,7 @@ import logging
 
 from seqdd.utils.reg_manager import load_source, save_source, create_register, Register
 from seqdd.downloaders.download import DownloadManager
-from seqdd.downloaders import ncbi, sra, url
+from seqdd.downloaders import ena_reads, ncbi, sra, url
 
 
 def parse_cmd():
@@ -25,7 +25,7 @@ def parse_cmd():
 
     # Add entries to the register
     add = subparsers.add_parser('add', help='Add dataset(s) to manage')
-    add.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='Download source. Can download from ncbi genomes, sra or an arbitrary url (uses wget to download)', required=True)
+    add.add_argument('-s', '--source', choices=['ncbi', 'sra', 'ena', 'url'], help='Download source. Can download from ncbi genomes, sra or an arbitrary url (uses wget to download)', required=True)
     add.add_argument('-a', '--accessions', nargs='+', default=[], help='List of accessions to register')
     add.add_argument('-f', '--file-of-accessions', default="", help='A file containing accessions to download, 1 per line')
     add.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
@@ -127,7 +127,7 @@ def on_add(args, logger):
             new_accessions.update(x.strip() for x in fr if len(x.strip()) > 0)
 
     # Verification of the accessions
-    classes = {'ncbi': ncbi.NCBI, 'sra':sra.SRA, 'url': url.URL}
+    classes = {'ncbi': ncbi.NCBI, 'sra':sra.SRA, 'url': url.URL, 'ena': ena_reads.ENA}
     validator = classes[args.source](tmpdir=args.tmp_directory, bindir=path.join(args.register_location, 'bin'), logger=logger)
     valid_accessions = validator.filter_valid_accessions(frozenset(args.accessions))
     
