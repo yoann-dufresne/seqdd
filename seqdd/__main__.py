@@ -1,13 +1,15 @@
 import argparse
 from os import path
+from sys import stderr
+
 import platform
 import re
-from sys import stderr
 import logging
 
-from seqdd.utils.reg_manager import load_source, save_source, create_register, Register
-from seqdd.downloaders.download import DownloadManager
-from seqdd.downloaders import ncbi, sra, url
+from seqdd.register.reg_manager import load_source, save_source, create_register, Register
+from seqdd.register.src_manager import SourceManager
+from seqdd.utils.download import DownloadManager
+
 
 
 def parse_cmd():
@@ -25,7 +27,7 @@ def parse_cmd():
 
     # Add entries to the register
     add = subparsers.add_parser('add', help='Add dataset(s) to manage')
-    add.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='Download source. Can download from ncbi genomes, sra or an arbitrary url (uses wget to download)', required=True)
+    add.add_argument('-s', '--source', choices=SourceManager.source_keys(), help='Download source. Can download from ncbi genomes, sra or an arbitrary url (uses wget to download)', required=True)
     add.add_argument('-a', '--accessions', nargs='+', default=[], help='List of accessions to register')
     add.add_argument('-f', '--file-of-accessions', default="", help='A file containing accessions to download, 1 per line')
     add.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
@@ -70,7 +72,7 @@ def on_remove(args, logger):
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.subregisters.keys() if args.source is None else args.source
+    src_names = reg.acc_by_src.keys() if args.source is None else [args.source]
     for name in src_names:
         acc_lst = reg.filter_accessions(name, valid_regexp)
         for acc in acc_lst:
@@ -89,7 +91,7 @@ def on_list(args, logger):
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.subregisters.keys() if args.source is None else args.source
+    src_names = reg.acc_by_src.keys() if args.source is None else args.source
     for name in src_names:
         acc_lst = reg.filter_accessions(name, valid_regexp)
 
@@ -113,9 +115,13 @@ def on_init(args, logger):
 def on_add(args, logger):
     # Getting the file to the sources
     src_path = path.join(args.register_location, f"{args.source}.txt")
+    bin_dir = path.join(args.register_location, 'bin')
+    # load the register
+    src_mng = SourceManager(args.tmp_directory, bin_dir, logger)
+    register = Register(logger, dirpath=args.register_location)
 
     # Load previous accession list
-    accessions = load_source(src_path)
+    accessions = register.acc_by_src.get(args.source, set())
     size_before = len(accessions)
 
     # Get the new accessions
@@ -127,9 +133,8 @@ def on_add(args, logger):
             new_accessions.update(x.strip() for x in fr if len(x.strip()) > 0)
 
     # Verification of the accessions
-    classes = {'ncbi': ncbi.NCBI, 'sra':sra.SRA, 'url': url.URL}
-    validator = classes[args.source](tmpdir=args.tmp_directory, bindir=path.join(args.register_location, 'bin'), logger=logger)
-    valid_accessions = validator.filter_valid_accessions(frozenset(args.accessions))
+    src_manip = src_mng.sources[args.source]
+    valid_accessions = src_manip.filter_valid_accessions(frozenset(args.accessions))
     
     # Add valid accessions
     accessions.update(valid_accessions)
@@ -141,8 +146,10 @@ def on_add(args, logger):
 
 
 def on_download(args, logger):
+    bindir = path.join(args.register_location, 'bin')
+    src_manager = SourceManager(args.tmp_directory, bindir, logger)
     reg = Register(logger, dirpath=args.register_location)
-    dm = DownloadManager(reg, logger, path.join(args.register_location, 'bin'), args.tmp_directory)
+    dm = DownloadManager(reg, src_manager, logger, bindir, args.tmp_directory)
     dm.download_to(args.download_directory, args.log_directory , args.max_processes)
 
 

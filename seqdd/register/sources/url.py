@@ -7,12 +7,18 @@ import time
 
 from seqdd.utils.scheduler import CmdLineJob
 
-
 from threading import Lock
 import time
 import subprocess
 from urllib.parse import urlparse
 from os import path
+
+
+naming = {
+    'name': 'url',
+    'key': 'url',
+    'classname': 'URL'
+}
 
 class URL:
     """
