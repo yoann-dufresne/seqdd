@@ -23,7 +23,7 @@ class SourceManager:
     
     def source_keys():
         src_modules = SourceManager.list_and_load_sources()
-        return [mod.naming['key'] for mod in src_modules]
+        return [mod.naming['key'] for mod in src_modules if hasattr(mod, 'naming')]
 
 
     def list_and_load_sources():

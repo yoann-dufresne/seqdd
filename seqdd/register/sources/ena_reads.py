@@ -3,13 +3,17 @@ import platform
 import re
 from shutil import rmtree, move
 import subprocess
-from sys import stderr
 from threading import Lock
 import time
 
-from seqdd.downloaders.download import check_binary
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
+
+naming = {
+    'name': 'ENA',
+    'key': 'ena',
+    'classname': 'ENA'
+}
 
 
 class ENA:
