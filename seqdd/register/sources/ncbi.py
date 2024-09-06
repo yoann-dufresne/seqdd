@@ -7,8 +7,16 @@ from threading import Lock
 import time
 
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
-from seqdd.downloaders.download import check_binary
+from seqdd.utils.download import check_binary
 import json
+
+# GCA_003774525.2 GCA_015190445.1 GCA_01519
+
+naming = {
+    'name': 'NCBI',
+    'key': 'ncbi',
+    'classname': 'NCBI'
+}
 
 
 class NCBI:
@@ -275,7 +283,7 @@ class NCBI:
         
         # Download...
         cmd = f'curl -o {path.join(download_dir, "datasets")} {download_link}'
-        ret = subprocess.run(cmd.split())
+        ret = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         if ret.returncode == 0:
             binpath = path.join(download_dir, 'datasets')

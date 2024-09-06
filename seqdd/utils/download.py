@@ -11,26 +11,14 @@ from seqdd.utils.scheduler import JobManager
 
 class DownloadManager:
 
-    def __init__(self, register, logger, bindir='bin', tmpdir='/tmp'):
+    def __init__(self, register, src_manager, logger, bindir='bin', tmpdir='/tmp'):
         self.register = register
+
         self.bindir = bindir
         self.tmpdir = tmpdir
-        self.downloaders = {}
         self.logger = logger
-        
-        self.init_downloaders()
 
-
-    def init_downloaders(self):
-        from seqdd.downloaders import url, ncbi, sra, ena_reads
-        if len(self.register.subregisters['ncbi']) > 0:
-            self.downloaders['ncbi'] = ncbi.NCBI(self.tmpdir, self.bindir, self.logger)
-        if len(self.register.subregisters['sra']) > 0:
-            self.downloaders['sra'] = sra.SRA(self.tmpdir, self.bindir, self.logger)
-        if len(self.register.subregisters['url']) > 0:
-            self.downloaders['url'] = url.URL(self.tmpdir, self.bindir, self.logger)
-        if len(self.register.subregisters['ena']) > 0:
-            self.downloaders['ena'] = ena_reads.ENA(self.tmpdir, self.bindir, self.logger)
+        self.src_manager = src_manager
 
 
     def download_to(self, datadir, logdir, max_process=8):
@@ -50,19 +38,19 @@ class DownloadManager:
         makedirs(logdir)
 
         # Create a dictionary to store the jobs for each source
-        jobs = {source: [] for source in self.register.subregisters}
+        jobs = {source: [] for source in self.register.acc_by_src}
 
         # Create the jobs for each source
-        for source in self.register.subregisters:
-            reg = self.register.subregisters[source]
+        for source in self.register.acc_by_src:
+            reg = self.register.acc_by_src[source]
+            manipulator = self.src_manager.get(source)
+
             if len(reg) > 0:
-                if source in self.downloaders:
-                    downloader = self.downloaders[source]
-                    if downloader.is_ready():
-                        jobs[source] = downloader.jobs_from_accessions(reg, datadir)
-                        self.logger.info(f'{len(reg)} datasets from {source} will be downloaded.')
-                    else:
-                        self.logger.warning(f'{source} datasets cannot be downloaded because the downloader is not ready. Skipping {len(reg)} datasets.', file=stderr)
+                if manipulator.is_ready():
+                    jobs[source] = manipulator.jobs_from_accessions(reg, datadir)
+                    self.logger.info(f'{len(reg)} datasets from {source} will be downloaded.')
+                else:
+                    self.logger.warning(f'{source} datasets cannot be downloaded because the downloader is not ready. Skipping {len(reg)} datasets.', file=stderr)
 
         # Create a JobManager instance
         manager = JobManager(max_process=max_process, log_folder=logdir, logger=self.logger)

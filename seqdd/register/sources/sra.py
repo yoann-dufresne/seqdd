@@ -6,9 +6,15 @@ from sys import stderr
 from threading import Lock
 import time
 
-from seqdd.downloaders.download import check_binary
+from seqdd.utils.download import check_binary
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
+
+naming = {
+    'name': 'SRA',
+    'key': 'sra',
+    'classname': 'SRA'
+}
 
 
 class SRA:
@@ -207,7 +213,7 @@ class SRA:
         self.logger.info('Download the sratoolkit binnary...')
 
         cmd = f'curl -o {tarpath} {download_link}'
-        ret = subprocess.run(cmd.split())
+        ret = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         if ret.returncode != 0:
             self.logger.error('Impossible to automatically download sratoolkit. SRA downloader has not been installed...')
@@ -215,7 +221,7 @@ class SRA:
 
         # Uncompress the archive
         cmd = f'tar -xzf {tarpath} -C {self.bindir}'
-        ret = subprocess.run(cmd.split())
+        ret = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         remove(tarpath)
 
         if ret.returncode != 0:
