@@ -69,16 +69,75 @@ class ENA:
             self.mutex.release()
         return ready
     
+    def wait_my_turn(self):
+        """
+        Waits for the minimum delay between ENA queries.
+        WARNING: The function acquires the mutex lock. You must release it after using this function.
+        """
+        while not self.ena_delay_ready():
+            time.sleep(0.01)
+        self.mutex.acquire()
+
+    
+    # --- ENA Job creations ---
+
+    def jobs_from_accessions(self, accessions, datadir):
+        """
+        Generates a list of jobs for downloading and processing ENA datasets.
+
+        Args:
+            accessions (list): A list of ENA accessions.
+            datadir (str): The output directory path.
+
+        Returns:
+            list: A list of jobs for downloading and processing ENA datasets.
+        """
+        jobs = []
+
+
+        # Each dataset download is independent
+        for acc in accessions:
+            tmp_dir = path.join(self.tmpdir, acc)
+            job_name = f'ena_{acc}'
+
+            # Get file urls to download
+            urls = self.get_ena_ftp_url(acc)
+            print(urls)
+            
+            # Set the jobs
+            # jobs.extend((prefetch_job, fasterqdump_job, compress_job, clean_job))
+
+        raise NotImplementedError
+        return jobs
+    
     def get_ena_ftp_url(self, accession):
         """
         Retourne l'URL FTP ENA à partir d'un numéro d'accession.
         """
 
         if accession.startswith("SRR") or accession.startswith("ERR") or accession.startswith("DRR"):
-            raise NotImplementedError
+            # Wait for the minimal query delay
+            self.wait_my_turn()
+            # Query the ENA database to know the number of files to download (paired or single-end)
+            query = f"https://www.ebi.ac.uk/ena/portal/api/filereport?accession={accession}&result=read_run&fields=run_accession,fastq_ftp&format=tsv"
+            response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.mutex.release()
+            # Fail on query error
+            if response.returncode != 0:
+                self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}\n{accession} will be skipped.')
+                return []
 
+            # Check if the sample is paired-end
+            response = response.stdout.decode()
+            paired = f'{accession}\tPAIRED' in response
+            print(response)
+            print(paired)
+            
         else:
             raise ValueError("Type d'accession non pris en charge.")
+        
+
+    # --- ENA accession validity ---
     
     def filter_valid_accessions(self, accessions):
         """
@@ -103,7 +162,6 @@ class ENA:
             to_query.append(acc)
 
         valid_accessions = self.accession_validity(to_query)
-        print(valid_accessions)
 
         return valid_accessions
 
@@ -136,8 +194,11 @@ class ENA:
             count = int(count.group(1))
             # If at least 1 accession is wrong, search for the remaining valid ones by doing smaller queries.
             if count < len(slice):
-                # At least 1 valid accession
-                if count > 0 and len(slice) > 1:
+                if count == 0:
+                    self.logger.warning(f'Invalid accession(s): {slice}')
+                    continue
+                # At least 2 accessions to verify
+                if len(slice) > 1:
                     iter_size = len(slice)//2
                     valid_accessions.extend(self.accession_validity(slice[:iter_size], query_size=iter_size))
                     valid_accessions.extend(self.accession_validity(slice[iter_size:], query_size=iter_size))
@@ -147,36 +208,5 @@ class ENA:
 
         return valid_accessions
     
-    def jobs_from_accessions(self, accessions, datadir):
-        """
-        Generates a list of jobs for downloading and processing ENA datasets.
-
-        Args:
-            accessions (list): A list of ENA accessions.
-            datadir (str): The output directory path.
-
-        Returns:
-            list: A list of jobs for downloading and processing ENA datasets.
-        """
-        jobs = []
-
-        raise NotImplementedError
-
-        # Each dataset download is independent
-        for acc in accessions:
-            tmp_dir = path.join(self.tmpdir, acc)
-            job_name = f'ena_{acc}'
-
-            # Prefetch data
-            cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {tmp_dir} {acc}'
-            prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
-
-            # Move to datadir and clean tmpdir
-            clean_job = FunctionJob(self.move_and_clean, func_args=(accession_dir, datadir, tmp_dir), parents=[compress_job], name=f'{job_name}_clean')
-
-            # Set the jobs
-            jobs.extend((prefetch_job, fasterqdump_job, compress_job, clean_job))
-
-        return jobs
 
     
