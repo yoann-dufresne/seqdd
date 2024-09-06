@@ -22,10 +22,15 @@ class DownloadManager:
 
 
     def init_downloaders(self):
-        from seqdd.downloaders import url, ncbi, sra
-        self.downloaders['ncbi'] = ncbi.NCBI(self.tmpdir, self.bindir, self.logger)
-        self.downloaders['sra'] = sra.SRA(self.tmpdir, self.bindir, self.logger)
-        self.downloaders['url'] = url.URL(self.tmpdir, self.bindir, self.logger)
+        from seqdd.downloaders import url, ncbi, sra, ena_reads
+        if len(self.register.subregisters['ncbi']) > 0:
+            self.downloaders['ncbi'] = ncbi.NCBI(self.tmpdir, self.bindir, self.logger)
+        if len(self.register.subregisters['sra']) > 0:
+            self.downloaders['sra'] = sra.SRA(self.tmpdir, self.bindir, self.logger)
+        if len(self.register.subregisters['url']) > 0:
+            self.downloaders['url'] = url.URL(self.tmpdir, self.bindir, self.logger)
+        if len(self.register.subregisters['ena']) > 0:
+            self.downloaders['ena'] = ena_reads.ENA(self.tmpdir, self.bindir, self.logger)
 
 
     def download_to(self, datadir, logdir, max_process=8):
