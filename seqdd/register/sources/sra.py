@@ -210,7 +210,7 @@ class SRA:
         makedirs(tmp_dir, exist_ok=True)
         tarpath = path.join(tmp_dir, tarname)
 
-        self.logger.info('Download the sratoolkit binnary...')
+        self.logger.info('Download the sratoolkit binnaries...')
 
         cmd = f'curl -o {tarpath} {download_link}'
         ret = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -245,7 +245,7 @@ class SRA:
             self.logger.error(f'Impossible to create symbolic link {fasterqdump_ln}. SRA downloader has not been installed...')
             return None
         
-        self.logger.error(f'SRA downloader binaries installed at {self.bindir}')
+        self.logger.info(f'SRA downloader binaries installed at {self.bindir}')
 
         return {
             'prefetch' : prefetch_ln,
