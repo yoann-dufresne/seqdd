@@ -1,5 +1,4 @@
-from os import listdir, makedirs, path, remove
-import platform
+from os import listdir, makedirs, path
 import re
 from shutil import rmtree, move
 import subprocess
@@ -49,12 +48,9 @@ class ENA:
 
     def is_ready(self):
         """
-        Checks if the SRA toolkit binaries are ready for use.
-
-        Returns:
-            bool: True if the binaries are ready, False otherwise.
+        No binaries, always ready.
         """
-        return self.binaries is not None
+        return True
     
     def ena_delay_ready(self):
         """
@@ -98,22 +94,64 @@ class ENA:
         """
         jobs = []
 
-
         # Each dataset download is independent
         for acc in accessions:
-            tmp_dir = path.join(self.tmpdir, acc)
             job_name = f'ena_{acc}'
+            # Create a temporary directory for the accession
+            tmp_dir = path.join(self.tmpdir, acc)
+            if path.exists(tmp_dir):
+                rmtree(tmp_dir)
+            makedirs(tmp_dir)
 
             # Get file urls to download
             urls = self.get_ena_ftp_url(acc)
             print(urls)
             
-            # Set the jobs
-            # jobs.extend((prefetch_job, fasterqdump_job, compress_job, clean_job))
+            # Creates a curl job for each URL
+            curl_jobs = []
+            for url in urls:
+                # Get the file name from the URL
+                filename = url.split('/')[-1]
+                # Create the output file path
+                output_file = path.join(tmp_dir, filename)
+                # Create the command line job
+                curl_jobs.append(CmdLineJob(
+                    command_line=f'curl -o {output_file} "{url}"',
+                    can_start = self.ena_delay_ready,
+                    name=f'{job_name}_{filename}'
+                ))
+            jobs.extend(curl_jobs)
+            
+            # Create a function job to move the files to the final directory
+            jobs.append(FunctionJob(
+                func_to_run = self.move_and_clean,
+                func_args = (tmp_dir, datadir),
+                parents = curl_jobs,
+                can_start = self.ena_delay_ready,
+                name=f'{job_name}_move'
+            ))
 
-        raise NotImplementedError
         return jobs
     
+    
+    def move_and_clean(self, accession_dir, outdir):
+        """
+        Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
+
+        Args:
+            accession_dir (str): The directory path containing the downloaded files.
+            outdir (str): The output directory path.
+            tmpdir (str): The temporary directory path.
+        """
+        # Enumerate all the files from the accession directory
+        for filename in listdir(accession_dir):
+            if filename.endswith('.gz'):
+                move(path.join(accession_dir, filename), path.join(outdir, filename))
+
+        # Clean the directory
+        rmtree(accession_dir)
+        
+        
     def get_ena_ftp_url(self, accession):
         """
         Retourne l'URL FTP ENA à partir d'un numéro d'accession.
@@ -133,9 +171,17 @@ class ENA:
 
             # Check if the sample is paired-end
             response = response.stdout.decode()
-            paired = f'{accession}\tPAIRED' in response
-            print(response)
-            print(paired)
+            lines = response.split('\n')
+            header = lines[0].split('\t')
+            fastq_ftp_index = header.index('fastq_ftp')
+            
+            # Search for the accession in the response
+            for line in lines[1:]:
+                if accession in line:
+                    # Return the FTP URLs
+                    return line.split('\t')[fastq_ftp_index].split(';')
+                
+            return []
             
         else:
             raise ValueError("Type d'accession non pris en charge.")

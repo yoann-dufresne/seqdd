@@ -165,9 +165,10 @@ class SRA:
         
         # Check if the software is locally installed
         prefetch_local_bin = path.abspath(path.join(self.bindir, 'prefetch'))
-        fasterqdump_local_bin = path.abspath(path.join(self.bindir, 'fastq-dump'))
+        fasterqdump_local_bin = path.abspath(path.join(self.bindir, 'fasterq-dump'))
         prefetch_installed = check_binary(prefetch_local_bin)
         fasterqdump_installed = check_binary(fasterqdump_local_bin)
+        
         if prefetch_installed and fasterqdump_installed:
             return {
                 'prefetch': f'{prefetch_local_bin}',
@@ -251,7 +252,7 @@ class SRA:
             'prefetch' : prefetch_ln,
             'fasterq-dump' : fasterqdump_ln
         }
-
+        
 
 # --- Cmds ---
 # ./sratoolkit.3.1.1-ubuntu64/bin/prefetch --max-size u --output-directory outtest SRR000001
