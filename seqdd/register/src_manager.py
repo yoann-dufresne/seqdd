@@ -9,6 +9,8 @@ class SourceManager:
         src_modules = SourceManager.list_and_load_sources()
         self.sources = dict()
         for src_module in src_modules:
+            if not hasattr(src_module, 'naming'):
+                continue
             src_init = getattr(src_module, src_module.naming['classname'])
             self.sources[src_module.naming['key']] = src_init(tmpdir, bindir, logger)
 

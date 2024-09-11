@@ -1,3 +1,4 @@
+* Yield jobs to start downloading from the beginning
 * Saving already downloaded files: Create a downloaded files register to avoid downloading multiple time the same file.
 * Extend NCBI downloads to other data type than genomes
 * Extend ENA downloads to other data types than raw reads

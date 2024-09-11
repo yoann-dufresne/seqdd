@@ -15,6 +15,8 @@ naming = {
 }
 
 
+
+
 class ENA:
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
@@ -28,6 +30,17 @@ class ENA:
         last_ena_query (float): The timestamp of the last ENA query.
 
     """
+
+    # Regular expression for each type of ENA accession
+    accession_patterns = {
+        'Study': r'(E|D|S)RP[0-9]{6,}|PRJ(E|D|N)[A-Z][0-9]+',
+        'Sample': r'(E|D|S)RS[0-9]{6,}|SAM(E|D|N)[A-Z]?[0-9]+',
+        'Run': r'(E|D|S)RR[0-9]{6,}',
+        'Experiment': r'(E|D|S)RX[0-9]{6,}',
+        'Assembly': r'GCA_[0-9]{9}\.[0-9]+', #
+        'Submission': r'(E|D|S)RA[0-9]{6,}'
+    }
+    
     
     def __init__(self, tmpdir, bindir, logger):
         """
@@ -94,8 +107,18 @@ class ENA:
         """
         jobs = []
 
+        # Checking already downloaded accessions
+        downloaded_accessions = frozenset(listdir(datadir))
+        print("Downloaded accessions", downloaded_accessions)
+        
+        self.logger.info(f'Creating jobs for {len(accessions) - len(downloaded_accessions)} ENA accessions')
+
         # Each dataset download is independent
         for acc in accessions:
+            # Skip already downloaded accessions
+            if acc in downloaded_accessions:
+                continue
+
             job_name = f'ena_{acc}'
             # Create a temporary directory for the accession
             tmp_dir = path.join(self.tmpdir, acc)
@@ -103,20 +126,28 @@ class ENA:
                 rmtree(tmp_dir)
             makedirs(tmp_dir)
 
+            # Check if the accession is an assembly and create jobs accordingly
+            if acc.startswith('GCA'):
+                jobs_from_assembly = self.jobs_from_assembly(acc, tmp_dir, datadir, job_name)
+                jobs.extend(jobs_from_assembly)
+                continue
+
             # Get file urls to download
             urls = self.get_ena_ftp_url(acc)
-            print(urls)
             
             # Creates a curl job for each URL
             curl_jobs = []
-            for url in urls:
+            md5s = dict()
+            for url, md5 in urls:
                 # Get the file name from the URL
                 filename = url.split('/')[-1]
+                # Store the MD5 hash
+                md5s[filename] = md5
                 # Create the output file path
                 output_file = path.join(tmp_dir, filename)
                 # Create the command line job
                 curl_jobs.append(CmdLineJob(
-                    command_line=f'curl -o {output_file} "{url}"',
+                    command_line=f'curl -s -o {output_file} "{url}"',
                     can_start = self.ena_delay_ready,
                     name=f'{job_name}_{filename}'
                 ))
@@ -125,7 +156,7 @@ class ENA:
             # Create a function job to move the files to the final directory
             jobs.append(FunctionJob(
                 func_to_run = self.move_and_clean,
-                func_args = (tmp_dir, datadir),
+                func_args = (tmp_dir, datadir, md5s),
                 parents = curl_jobs,
                 can_start = self.ena_delay_ready,
                 name=f'{job_name}_move'
@@ -133,8 +164,51 @@ class ENA:
 
         return jobs
     
+    def jobs_from_assembly(self, assembly, tmpdir, outdir, job_name):
+        """
+        Creates a list of jobs for downloading and processing an assembly.
+
+        Args:
+            assembly (str): The assembly accession.
+            tmpdir (str): The temporary directory path.
+            outdir (str): The output directory path.
+            job_name (str): The name of the job.
+
+        Returns:
+            list: A list of jobs for downloading and processing an assembly.
+        """
+        # Get the assembly URL
+        url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{assembly}'
+        # Create the output file path
+        output_file = path.join(tmpdir, f'{assembly}.fa')
+
+        # Create the command line job
+        curl_job = CmdLineJob(
+            command_line=f'curl -o {output_file} "{url}"',
+            can_start=self.ena_delay_ready,
+            name=f'{job_name}_{assembly}_download'
+        )
+        # Create a compression job
+        gzip_job = CmdLineJob(
+            command_line=f'gzip {output_file}',
+            parents=[curl_job],
+            can_start=self.ena_delay_ready,
+            name=f'{job_name}_{assembly}_gzip'
+        )
+
+        # Create a function job to move the files to the final directory
+        move_job = FunctionJob(
+            func_to_run=self.move_and_clean,
+            func_args=(tmpdir, outdir),
+            parents=[gzip_job],
+            can_start=self.ena_delay_ready,
+            name=f'{job_name}_{assembly}_move'
+        )
+
+        return [curl_job, gzip_job, move_job]
     
-    def move_and_clean(self, accession_dir, outdir):
+    
+    def move_and_clean(self, accession_dir, outdir, md5s=None):
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
@@ -143,49 +217,30 @@ class ENA:
             outdir (str): The output directory path.
             tmpdir (str): The temporary directory path.
         """
+        if md5s is None:
+            # Validate the MD5 hashes
+            for filename, md5 in md5s.items():
+                file_path = path.join(accession_dir, filename)
+                md5_check = subprocess.run(['md5sum', file_path], stdout=subprocess.PIPE)
+                # Get the MD5 hash of the file
+                md5_hash = md5_check.stdout.decode().split()[0]
+                # Check if the MD5 hash is correct
+                if md5 != md5_hash:
+                    self.logger.error(f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\nAccession files will not be downloaded.')
+                    rmtree(accession_dir)
+                    return
+
+        # Create the accession directory in the output directory
+        outdir = path.join(outdir, path.basename(accession_dir))
+        makedirs(outdir, exist_ok=True)
+
+        filenames = listdir(accession_dir) if md5s is None else md5s.keys()
         # Enumerate all the files from the accession directory
-        for filename in listdir(accession_dir):
-            if filename.endswith('.gz'):
-                move(path.join(accession_dir, filename), path.join(outdir, filename))
+        for filename in filenames:
+            move(path.join(accession_dir, filename), path.join(outdir, filename))
 
         # Clean the directory
         rmtree(accession_dir)
-        
-        
-    def get_ena_ftp_url(self, accession):
-        """
-        Retourne l'URL FTP ENA à partir d'un numéro d'accession.
-        """
-
-        if accession.startswith("SRR") or accession.startswith("ERR") or accession.startswith("DRR"):
-            # Wait for the minimal query delay
-            self.wait_my_turn()
-            # Query the ENA database to know the number of files to download (paired or single-end)
-            query = f"https://www.ebi.ac.uk/ena/portal/api/filereport?accession={accession}&result=read_run&fields=run_accession,fastq_ftp&format=tsv"
-            response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.mutex.release()
-            # Fail on query error
-            if response.returncode != 0:
-                self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}\n{accession} will be skipped.')
-                return []
-
-            # Check if the sample is paired-end
-            response = response.stdout.decode()
-            lines = response.split('\n')
-            header = lines[0].split('\t')
-            fastq_ftp_index = header.index('fastq_ftp')
-            
-            # Search for the accession in the response
-            for line in lines[1:]:
-                if accession in line:
-                    # Return the FTP URLs
-                    return line.split('\t')[fastq_ftp_index].split(';')
-                
-            return []
-            
-        else:
-            raise ValueError("Type d'accession non pris en charge.")
-        
 
     # --- ENA accession validity ---
     
@@ -199,33 +254,34 @@ class ENA:
         Returns:
             list: A list of valid ENA accessions.
         """
-
-        valid_formats = frozenset(['SRR', 'ERR', 'DRR'])
-
-        to_query = []
-
+        accessions_by_type = dict()
         for acc in accessions:
-            # Check if the accession type is valid
-            if not acc[:3] in valid_formats:
-                self.logger.warning(f"{acc} is not a valid ENA reads accession.")
-                continue
-            to_query.append(acc)
+            acc_type = self.validate_accession(acc)
+            if acc_type not in accessions_by_type:
+                accessions_by_type[acc_type] = set()
+            accessions_by_type[acc_type].add(acc)
 
-        valid_accessions = self.accession_validity(to_query)
+        valid_accessions = []
+        for acc_type in accessions_by_type:
+            # Skip invalid accessions
+            if acc_type == 'Invalid':
+                continue
+
+            # Server validation
+            valid_accessions.extend(self.valid_accessions_on_API(list(accessions_by_type[acc_type])))
 
         return valid_accessions
 
-    def accession_validity(self, accessions, query_size=8):
+    def valid_accessions_on_API(self, accessions, query_size=32):
         valid_accessions = []
-        query_header = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra&term='
+        query_begin = 'https://www.ebi.ac.uk/ena/browser/api/xml/'
+        query_end = '?download=false&gzip=false&includeLinks=false'
 
         for i in range(0, len(accessions), query_size):
             slice = accessions[i:i+query_size]
-            query = f'{query_header}{"+OR+".join(slice)}'
+            query = f'{query_begin}{",".join(slice)}{query_end}'
             # Wait for the delay
-            while not self.ena_delay_ready():
-                time.sleep(0.01)
-            self.mutex.acquire()
+            self.wait_my_turn()
             # Query the ENA database
             response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if response.returncode != 0:
@@ -234,29 +290,103 @@ class ENA:
             # Update the last query time
             self.last_ena_query = time.time()
             self.mutex.release()
+
             # Parse the response
             response = response.stdout.decode()
-            # Find the number of results inside of the response. It is present between the <Count> tags
-            count = re.search(r'<Count>(\d+)</Count>', response)
-            if count is None:
-                self.logger.error(f'Error parsing ENA response\nQuery: {query}\nAnswer: {response}')
+            if 'ErrorDetails' in response:
+                self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response}')
                 continue
-            count = int(count.group(1))
-            # If at least 1 accession is wrong, search for the remaining valid ones by doing smaller queries.
-            if count < len(slice):
-                if count == 0:
-                    self.logger.warning(f'Invalid accession(s): {slice}')
-                    continue
-                # At least 2 accessions to verify
-                if len(slice) > 1:
-                    iter_size = len(slice)//2
-                    valid_accessions.extend(self.accession_validity(slice[:iter_size], query_size=iter_size))
-                    valid_accessions.extend(self.accession_validity(slice[iter_size:], query_size=iter_size))
-            else:
-                self.logger.info(f'Known valid accessions: {slice}')
-                valid_accessions.extend(slice)
+
+            for acc in slice:
+                if acc in response:
+                    valid_accessions.append(acc)
+
+        invalid_accessions = set(accessions) - set(valid_accessions)
+        if len(invalid_accessions) > 0:
+            self.logger.warning(f'Accession(s) not found on ENA servers: {", ".join(invalid_accessions)}')
 
         return valid_accessions
     
 
+    def validate_accession(self, accession):
+        """
+        Validates a given accession.
+
+        Args:
+            accession (str): The accession to validate.
+
+        Returns:
+            str: The type of accession if it is valid, otherwise None.
+        """
+        for accession_type, pattern in ENA.accession_patterns.items():
+            if re.fullmatch(pattern, accession):
+                return accession_type
+        self.logger.warning(f'Invalid accession: {accession}')
+        return 'Invalid'
     
+
+    # --- ENA FTP URL retrieval ---
+
+    def get_ena_ftp_url(self, accession):
+        """
+        Returns the ENA FTP URL(s) from an accession number.
+        """
+        print("Getting ENA FTP URL(s) for accession", accession)
+        # Query the ENA API to get the FTP URL(s) for fastq files
+        query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accession}?download=false&gzip=false&includeLinks=false'
+        self.wait_my_turn()
+        response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # Update the last query time
+        self.last_ena_query = time.time()
+        self.mutex.release()
+        # Check if the query was successful
+        if response.returncode != 0:
+            self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
+            return []
+        
+        # Parse the response
+        response = response.stdout.decode()
+        # Get the url for submitted files
+        match = re.search(r'<ID><!\[CDATA\[(https?://[^\]]+submitted_ftp[^\]]*)\]\]></ID>', response)
+        if not match:
+            self.logger.error(f'No submitted files found for accession {accession}')
+            return []
+        
+        # Get the file list from the URL
+        submitted_url = match.group(1)
+        self.wait_my_turn()
+        response = subprocess.run(['curl', submitted_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Update the last query time
+        self.last_ena_query = time.time()
+        self.mutex.release()
+        # Check if the query was successful
+        if response.returncode != 0:
+            self.logger.error(f'Error querying ENA\nQuery: {submitted_url}\nAnswer: {response.stderr.decode()}')
+            return []
+        
+        # Parse the response
+        lines = response.stdout.decode().strip().split('\n')
+        if len(lines) < 2:
+            return []
+
+        # Get the header
+        header = lines[0].split()
+        if 'submitted_ftp' not in header or 'submitted_md5' not in header:
+            self.logger.error(f'No submitted files found for accession {accession}')
+            return []
+        
+        files = []
+        # Get the FTP URLs and MD5 hashes
+        for line in lines[1:]:
+            data = line.split('\t')
+
+            ftp_index = header.index('submitted_ftp')
+            md5_index = header.index('submitted_md5')
+
+            ftp_urls = data[ftp_index].split(';')
+            md5_hashes = data[md5_index].split(';')
+
+            files.extend(zip(ftp_urls, md5_hashes))
+
+        return files
