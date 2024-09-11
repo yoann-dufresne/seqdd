@@ -217,7 +217,7 @@ class ENA:
             outdir (str): The output directory path.
             tmpdir (str): The temporary directory path.
         """
-        if md5s is None:
+        if md5s is not None:
             # Validate the MD5 hashes
             for filename, md5 in md5s.items():
                 file_path = path.join(accession_dir, filename)
