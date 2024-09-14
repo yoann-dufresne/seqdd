@@ -152,12 +152,8 @@ class NCBI:
             subpath = path.join(data_dir, subname)
             # Looks only for datasets
             if path.isdir(subpath):
-                # Looks only for datafiles
-                for file in listdir(subpath):
-                    if file.endswith(".gz"):
-                        filepath = path.join(subpath, file)
-                        # Move the data to its final destination
-                        move(filepath, path.join(dest_dir, file))
+                # Move the directory and its content to the final directory
+                move(subpath, path.join(dest_dir, subname))
 
         # Clean the download directory
         rmtree(tmp_dir)

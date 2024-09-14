@@ -38,12 +38,16 @@ class JobManager(Thread):
             # Remove finished jobs from running
             for job in to_remove:
                 self.running.remove(job)
+                notified = False
                 if job.get_returncode() != 0:
+                    self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
+                    self.logger.error(f'Please check the log file for more details: {job.log_file}')
+                    notified = True
                     self.cancel_job(job)
                 job.join()
                 if job.get_returncode() == 0:
                     self.logger.info(f'DONE {job}')
-                else:
+                elif not notified:
                     self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
                     self.logger.error(f'Please check the log file for more details: {job.log_file}')
 
@@ -137,7 +141,7 @@ class Job:
     can_start : Function
         A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
     """
-    def __init__(self, name=None, parents=[], can_start=lambda:True, log_file=None):
+    def __init__(self, name=None, parents=None, can_start=lambda:True, log_file=None):
         """
         Constructs all the necessary attributes for the person object.
 
@@ -152,7 +156,7 @@ class Job:
         self.log_file = log_file if log_file is not None else f'{self.name}.log'
         Job.ID += 1
 
-        self.parents = parents
+        self.parents = [] if parents is None else parents
         self.is_over = False
         self.process = None
         self.can_start = can_start
@@ -187,7 +191,7 @@ class FunctionJob(Job):
     '''
     A Job class that wrap a function to run in a subprocess.
     '''
-    def __init__(self, func_to_run, func_args=(), parents=[], can_start=lambda:True, name=None, log_file=None):
+    def __init__(self, func_to_run, func_args=(), parents=None, can_start=lambda:True, name=None, log_file=None):
         '''
             Parameters
             ----------
@@ -259,7 +263,7 @@ class CmdLineJob(Job):
     '''
     A Job class that wrap a command line to run in a subprocess.
     '''
-    def __init__(self, command_line, parents=[], can_start=lambda:True, name=None, log_file=None):
+    def __init__(self, command_line, parents=None, can_start=lambda:True, name=None, log_file=None):
         '''
             Parameters
             ----------
