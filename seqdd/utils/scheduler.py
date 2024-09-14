@@ -51,6 +51,7 @@ class JobManager(Thread):
                     self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
                     self.logger.error(f'Please check the log file for more details: {job.log_file}')
 
+
             # Add new processes
             to_remove = []
             for job in self.waiting:
