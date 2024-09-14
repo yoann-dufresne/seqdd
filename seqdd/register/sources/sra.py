@@ -199,28 +199,39 @@ class SRA:
     
 
     def run_fasterqdump_from_SRXP(self, SRXP_directory):
+        # TODO: Move log files to the log directory. Can be done after yielding.
+        SRX_name = path.basename(SRXP_directory)
+
         for subdirectory_name in listdir(SRXP_directory):
             subdirectory = path.join(SRXP_directory, subdirectory_name)
-            print(subdirectory)
             # Verify that is a run subdirectory
             if (not path.isdir(subdirectory)) or (not subdirectory_name.startswith('SRR')):
                 continue
             
+            res = None
+            log_file = path.join(self.tmpdir, f'{SRX_name}_{subdirectory_name}_fasterq-dump.log')
+            
             # Split the sra files into fastq files
             cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {subdirectory} {subdirectory}'
-            res = subprocess.run(cmd.split())
+            with open(log_file, 'w') as log:
+                res = subprocess.run(cmd.split(), stdout=log, stderr=log)
             if res.returncode != 0:
                 self.logger.error(f'Error while running fasterq-dump on {subdirectory}')
                 raise Exception(f'Error while running fasterq-dump on {subdirectory}')
             
-            print(listdir(subdirectory))
+            res = None
+            log_file = path.join(self.tmpdir, f'{SRX_name}_{subdirectory_name}_gzip.log')
+            fp = open(log_file, 'w')
+            fp.close()
+
 
             # Compress fastq files
             for filename in listdir(subdirectory):
                 if not filename.endswith('.fastq'):
                     continue
                 cmd = f'gzip {path.join(subdirectory, filename)}'
-                res = subprocess.run(cmd.split())
+                with open(log_file, 'a') as log:
+                    res = subprocess.run(cmd.split(), stdout=log, stderr=log)
                 if res.returncode != 0:
                     self.logger.error(f'Error while compressing fastq files in {subdirectory}')
                     raise Exception(f'Error while compressing fastq files in {subdirectory}')
@@ -231,7 +242,6 @@ class SRA:
 
             # Remove the subdirectory
             rmtree(subdirectory)
-    
     
 
     # ---- Toolkit preparation ----
