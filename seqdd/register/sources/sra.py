@@ -105,47 +105,136 @@ class SRA:
 
         # Each dataset download is independent
         for acc in accessions:
-            tmp_dir = path.join(self.tmpdir, acc)
+            # Do not download an already downloaded dataset
+            if path.exists(path.join(datadir, acc)):
+                self.logger.info(f'{acc} already downloaded. Skipping...')
+                continue
+
+            # Create a job name based on the accession
             job_name = f'sra_{acc}'
-
-            # Prefetch data
-            cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {tmp_dir} {acc}'
-            prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
-
-            # Split files
-            accession_dir = path.join(tmp_dir, acc)
-            cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
-            fasterqdump_job = CmdLineJob(cmd, parents=[prefetch_job], can_start=self.sra_delay_ready, name=f'{job_name}_fasterqdump')
             
-            # Compress files
-            cmd = f'gzip {path.join(accession_dir, "*.fastq")}'
-            compress_job = CmdLineJob(cmd, parents=[fasterqdump_job], name=f'{job_name}_compress')
+            # Create a tmp directory for the accession. Remove the previous one if it exists
+            acc_dir = path.join(self.tmpdir, acc)
+            if path.exists(acc_dir):
+                rmtree(acc_dir)
+            makedirs(acc_dir)
+
+
+            # Fasterq-dump
+            prefetch_job = None
+            fasterq_dump_jobs = []
+            if acc.startswith('SRR'):
+                # Prefetch data
+                cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {self.tmpdir} {acc}'
+                prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
+                # Download SRR accession
+                fasterq_dump_jobs = self.jobs_from_SRR(acc_dir, job_name)
+            elif acc.startswith('SRX') or acc.startswith('SRP'):
+                # Prefetch data
+                cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {acc_dir} {acc}'
+                prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
+                fasterq_dump_jobs = self.jobs_from_SRXP(acc_dir, job_name)
+
+            # define parents
+            for job in fasterq_dump_jobs:
+                job.parents.append(prefetch_job)
 
             # Move to datadir and clean tmpdir
-            clean_job = FunctionJob(self.move_and_clean, func_args=(accession_dir, datadir, tmp_dir), parents=[compress_job], name=f'{job_name}_clean')
+            clean_job = FunctionJob(self.move_and_clean, func_args=(acc_dir, datadir), parents=fasterq_dump_jobs, name=f'{job_name}_clean')
 
             # Set the jobs
-            jobs.extend((prefetch_job, fasterqdump_job, compress_job, clean_job))
+            jobs.append(prefetch_job)
+            jobs.extend(fasterq_dump_jobs)
+            jobs.append(clean_job)
 
         return jobs
+    
 
-
-    def move_and_clean(self, accession_dir, outdir, tmpdir):
+    def move_and_clean(self, accession_dir, outdir):
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
         Args:
             accession_dir (str): The directory path containing the downloaded files.
             outdir (str): The output directory path.
-            tmpdir (str): The temporary directory path.
         """
+        # Get the accession name
+        accession = path.basename(accession_dir)
+        outdir = path.join(outdir, accession)
+        makedirs(outdir, exist_ok=True)
+
         # Enumerate all the files from the accession directory
-        for filename in listdir(accession_dir):
-            if filename.endswith('.gz'):
-                move(path.join(accession_dir, filename), path.join(outdir, filename))
+        for node in listdir(accession_dir):
+            nodepath = path.join(accession_dir, node)
+            # Move SRR accession files
+            if path.isfile(nodepath) and node.endswith('.gz'):
+                move(path.join(accession_dir, node), path.join(outdir, node))
 
         # Clean the directory
-        rmtree(tmpdir)
+        rmtree(accession_dir)
+
+
+    # ---- SRA specific jobs ----
+
+    def jobs_from_SRR(self, accession_dir, job_name):
+        # Split files
+        cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
+        fasterqdump_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_fasterqdump')
+        
+        # Compress files
+        cmd = f'gzip {path.join(accession_dir, "*.fastq")}'
+        compress_job = CmdLineJob(cmd, parents=[fasterqdump_job], name=f'{job_name}_compress')
+
+        return [fasterqdump_job, compress_job]
+    
+
+    def jobs_from_SRXP(self, acc_dir, job_name):
+        SRXP_subjob = FunctionJob(
+            self.run_fasterqdump_from_SRXP,
+            func_args=(acc_dir,),
+            name=f'{job_name}_fasterqdump+gzip'
+        )
+
+        return [SRXP_subjob]
+    
+
+    def run_fasterqdump_from_SRXP(self, SRXP_directory):
+        for subdirectory_name in listdir(SRXP_directory):
+            subdirectory = path.join(SRXP_directory, subdirectory_name)
+            print(subdirectory)
+            # Verify that is a run subdirectory
+            if (not path.isdir(subdirectory)) or (not subdirectory_name.startswith('SRR')):
+                continue
+            
+            # Split the sra files into fastq files
+            cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {subdirectory} {subdirectory}'
+            res = subprocess.run(cmd.split())
+            if res.returncode != 0:
+                self.logger.error(f'Error while running fasterq-dump on {subdirectory}')
+                raise Exception(f'Error while running fasterq-dump on {subdirectory}')
+            
+            print(listdir(subdirectory))
+
+            # Compress fastq files
+            for filename in listdir(subdirectory):
+                if not filename.endswith('.fastq'):
+                    continue
+                cmd = f'gzip {path.join(subdirectory, filename)}'
+                res = subprocess.run(cmd.split())
+                if res.returncode != 0:
+                    self.logger.error(f'Error while compressing fastq files in {subdirectory}')
+                    raise Exception(f'Error while compressing fastq files in {subdirectory}')
+            
+                gzip_filename = f'{filename}.gz'
+                # Move the compressed files to the SRXP directory
+                move(path.join(subdirectory, gzip_filename), path.join(SRXP_directory, gzip_filename))
+
+            # Remove the subdirectory
+            rmtree(subdirectory)
+    
+    
+
+    # ---- Toolkit preparation ----
     
     def download_sra_toolkit(self):
         """

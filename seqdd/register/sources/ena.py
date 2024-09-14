@@ -109,7 +109,6 @@ class ENA:
 
         # Checking already downloaded accessions
         downloaded_accessions = frozenset(listdir(datadir))
-        print("Downloaded accessions", downloaded_accessions)
         
         self.logger.info(f'Creating jobs for {len(accessions) - len(downloaded_accessions)} ENA accessions')
 
@@ -331,7 +330,6 @@ class ENA:
         """
         Returns the ENA FTP URL(s) from an accession number.
         """
-        print("Getting ENA FTP URL(s) for accession", accession)
         # Query the ENA API to get the FTP URL(s) for fastq files
         query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accession}?download=false&gzip=false&includeLinks=false'
         self.wait_my_turn()
