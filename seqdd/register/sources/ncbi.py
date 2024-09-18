@@ -90,6 +90,19 @@ class NCBI:
             self.mutex.release()
         return ready
     
+    def wait_ncbi_delay(self):
+        """
+            Wait for the NCBI ressource to be available (some delay between queries must be waited). Once the delay has passed, it acquires a mutex lock to ensure that no other operation is queriing instead.
+
+            Returns:
+                threading.Lock: The NCBI query lock.
+        """
+        while not self.ncbi_delay_ready():
+            time.sleep(time.time() - self.last_ncbi_query)
+
+        self.mutex.acquire()
+        return self.mutex
+    
     def jobs_from_accessions(self, accessions, dest_dir):
         """
         Generates a list of jobs for downloading and processing accessions.
@@ -158,6 +171,34 @@ class NCBI:
         # Clean the download directory
         rmtree(tmp_dir)
 
+
+    def is_valid_acc_format(self, acc):
+        """
+        Check if the given accession number is in a valid format.
+        An accession number is considered valid if it:
+        - Starts with 'GCA_' or 'GCF_'
+        - Contains a period ('.') separating the ID and version
+        - The ID part is exactly 9 digits long
+        - Both the ID and version parts are numeric
+        Parameters:
+        acc (str): The accession number to validate.
+        Returns:
+        bool: True if the accession number is in a valid format, False otherwise.
+        """
+        if not (acc.startswith('GCA_') or acc.startswith('GCF_')):
+            return False
+
+        acc = acc[4:]
+        if '.' not in acc:
+            return False
+        
+        id, version = acc.split('.')
+        if len(id) != 9 or not id.isdigit() or not version.isdigit():
+            return False
+        
+        return True
+    
+
     def filter_valid_accessions(self, accessions):
         """
         Filters and validates a list of accessions.
@@ -168,56 +209,47 @@ class NCBI:
         Returns:
             set: The set of valid accessions.
         """
-        accessions_list = list(accessions)
-        valid_accessions = set()
-
-        for idx in range(0, len(accessions), 10):
-            # Accessions slice to validate
-            accessions_slice = accessions_list[idx:idx+10]
-
-            # Create a temporary directory for the current validation
-            tmp_path = path.join(self.tmp_dir, f'ncbi_valid_{idx}')
-            makedirs(tmp_path)
-            archive_path = path.join(tmp_path, 'accessions.zip')
-
-            # TODO: Wait the minimum delay between queries
-            # Download the accessions info
-            cmd = f'{self.bin} download genome accession {" ".join(accessions_slice)} --no-progressbar --include none --filename {archive_path}'
-            ret = subprocess.run(cmd.split())
-
-            # Check download status
-            if ret.returncode != 0:
-                self.logger.error(f'Datasets software error while downloading the accessions info: {ret.stderr}\nSkipping the validation of the accessions: {accessions_slice}')
-                rmtree(tmp_path)
-                continue
-
-            # Unzip the accessions info
-            unzip_path = path.join(tmp_path, 'accessions')
-            cmd = f'unzip -qq {archive_path} -d {unzip_path}'
-            ret = subprocess.run(cmd.split())
-
-            # Check unzip status
-            if ret.returncode != 0:
-                self.logger.error(f'Impossible to unzip the accessions info: {archive_path}\nSkipping the validation of the accessions: {accessions_slice}')
-                rmtree(tmp_path)
-                continue
-
-            # Check the accessions
-            with open(path.join(unzip_path, 'ncbi_dataset', 'data', 'assembly_data_report.jsonl')) as fr:
-                for line in fr:
-                    # parse the json from the line
-                    data = json.loads(line)
-                    line_acc = data['accession']
-                    if line_acc in accessions_slice:
-                        valid_accessions.add(line_acc)
-
-            # Clean the temporary directory
-            rmtree(tmp_path)
-            
-        # Print the list of invalid accessions
-        invalid_accessions = accessions - valid_accessions
+        accessions_list = [acc for acc in accessions if self.is_valid_acc_format(acc)]
+        invalid_accessions = list(accessions - set(accessions_list))
         if len(invalid_accessions) > 0:
-            self.logger.warning(f'The following accessions are skipped: {", ".join(list(invalid_accessions))}\nThose accessions will be ignored.')
+            self.logger.warning(f'Wrong format accessions: {", ".join(invalid_accessions)}. Expectiing GCA_XXXXXXXXX.Y or GCF_XXXXXXXXX.Y')
+
+        valid_accessions = set()
+        unknown_accessions = set()
+        accessions_per_query = 32
+
+        for idx in range(0, len(accessions), accessions_per_query):
+            slice = accessions_list[idx:idx+accessions_per_query]
+
+            # Query the NCBI to check if the accessions are valid
+            cmd = f'{self.bin} summary genome accession {" ".join(slice)}'
+            lock = self.wait_ncbi_delay()
+            ret = subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            lock.release()
+
+            if ret.returncode != 0:
+                self.logger.error(f'Failed to query NCBI for accessions: {", ".join(slice)}')
+                continue
+
+            # parse the json from the stout of the subprocess
+            slice_set = set(slice)
+            try:
+                data = json.loads(ret.stdout)
+                if 'reports' in data:
+                    # Update accessions returned
+                    for acc_obj in data['reports']:
+                        acc = acc_obj['accession']
+                        if acc in slice_set:
+                            valid_accessions.add(acc)
+                            slice_set.remove(acc)
+
+                # Update unknown accessions
+                unknown_accessions.update(slice_set)
+            except json.JSONDecodeError:
+                self.logger.error(f'Failed to parse the json response from NCBI for accessions: {", ".join(slice)}')
+
+        if len(unknown_accessions) > 0:
+            self.logger.warning(f'Unknown accessions: {", ".join(unknown_accessions)}')
 
         return valid_accessions
     
