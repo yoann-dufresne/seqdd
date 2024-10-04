@@ -344,23 +344,23 @@ class ENA:
         
         # Parse the response
         response = response.stdout.decode()
-        # Get the url for submitted files
-        match = re.search(r'<ID><!\[CDATA\[(https?://[^\]]+submitted_ftp[^\]]*)\]\]></ID>', response)
+        # Get the url for fastq files
+        match = re.search(r'<ID><!\[CDATA\[(https?://[^\]]+fastq_ftp[^\]]*)\]\]></ID>', response)
         if not match:
-            self.logger.error(f'No submitted files found for accession {accession}')
+            self.logger.error(f'No fastq files found for accession {accession}')
             return []
         
         # Get the file list from the URL
-        submitted_url = match.group(1)
+        fastq_url = match.group(1)
         self.wait_my_turn()
-        response = subprocess.run(['curl', submitted_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        response = subprocess.run(['curl', fastq_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # Update the last query time
         self.last_ena_query = time.time()
         self.mutex.release()
         # Check if the query was successful
         if response.returncode != 0:
-            self.logger.error(f'Error querying ENA\nQuery: {submitted_url}\nAnswer: {response.stderr.decode()}')
+            self.logger.error(f'Error querying ENA\nQuery: {fastq_url}\nAnswer: {response.stderr.decode()}')
             return []
         
         # Parse the response
@@ -370,8 +370,8 @@ class ENA:
 
         # Get the header
         header = lines[0].split()
-        if 'submitted_ftp' not in header or 'submitted_md5' not in header:
-            self.logger.error(f'No submitted files found for accession {accession}')
+        if 'fastq_ftp' not in header or 'fastq_md5' not in header:
+            self.logger.error(f'No fastq files found for accession {accession}')
             return []
         
         files = []
@@ -379,12 +379,19 @@ class ENA:
         for line in lines[1:]:
             data = line.split('\t')
 
-            ftp_index = header.index('submitted_ftp')
-            md5_index = header.index('submitted_md5')
+            ftp_index = header.index('fastq_ftp')
+            md5_index = header.index('fastq_md5')
 
-            ftp_urls = data[ftp_index].split(';')
-            md5_hashes = data[md5_index].split(';')
+            # If there is no download link, query the alias accession
+            if len(data) <= ftp_index or len(data[ftp_index]) == 0:
+                alias = data[header.index('run_accession')]
+                self.logger.warning(f'No download link found for accession {alias} from the querry {accession}.')
 
-            files.extend(zip(ftp_urls, md5_hashes))
+            else:
+                # Add the ftp URL and the md5 hash to the list
+                ftp_urls = data[ftp_index].split(';')
+                md5_hashes = data[md5_index].split(';')
+
+                files.extend(zip(ftp_urls, md5_hashes))
 
         return files
