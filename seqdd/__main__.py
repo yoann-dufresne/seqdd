@@ -130,11 +130,11 @@ def on_add(args, logger):
         new_accessions.update(args.accessions)
     if path.isfile(args.file_of_accessions):
         with open(args.file_of_accessions) as fr:
-            new_accessions.update(x.strip() for x in fr if len(x.strip()) > 0)
+            new_accessions.update([x.strip() for x in fr if len(x.strip()) > 0])
 
     # Verification of the accessions
     src_manip = src_mng.sources[args.source]
-    valid_accessions = src_manip.filter_valid_accessions(frozenset(args.accessions))
+    valid_accessions = src_manip.filter_valid_accessions(frozenset(new_accessions))
     
     # Add valid accessions
     accessions.update(valid_accessions)
