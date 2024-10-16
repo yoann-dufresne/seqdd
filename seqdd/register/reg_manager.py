@@ -1,3 +1,4 @@
+import logging
 from os import path, makedirs, remove
 from shutil import rmtree
 
@@ -30,7 +31,7 @@ class Register:
     major_version = 0
     minor_version = 0
 
-    def __init__(self, logger, dirpath=None, regfile=None):
+    def __init__(self, logger: logging.Logger, dirpath: str =None, regfile: str = None) -> None:
         """
         Initializes a Register object.
 
@@ -51,7 +52,7 @@ class Register:
         if regfile is not None:
             self.load_from_file(regfile)
 
-    def load_from_dir(self, dirpath):
+    def load_from_dir(self, dirpath: str) -> bool:
         """
         Loads subregisters from a directory.
 
@@ -76,7 +77,7 @@ class Register:
         self.logger.debug(f'Register loaded from {dirpath}')
         return True
 
-    def save_to_dir(self, dirpath):
+    def save_to_dir(self, dirpath: str) -> bool:
         """
         Saves subregisters to a directory.
 
@@ -103,7 +104,7 @@ class Register:
         self.logger.debug(f'Register saved to {dirpath}')
         return True
 
-    def save_to_file(self, file):
+    def save_to_file(self, file: str) -> None:
         """
         Saves the register to a file.
 
@@ -121,7 +122,8 @@ class Register:
 
         self.logger.debug(f'Datasets saved to register file {file}')
 
-    def load_from_file(self, file):
+
+    def load_from_file(self, file: str) -> None:
         """
         Loads the register from a file.
 
@@ -136,10 +138,14 @@ class Register:
                 return
             major, minor = (int(x) for x in version.split('.'))
             if major != self.major_version:
-                self.logger.error(f'Incompatible versions. Your register is major version {major} while the tool awaits version {Register.major_version}. Skipping the loading')
+                self.logger.error(f'Incompatible versions. '
+                                  f'Your register is major version {major} while the tool awaits '
+                                  f'version {Register.major_version}. Skipping the loading')
                 return
             if minor > Register.minor_version:
-                self.logger.error(f'Incompatible versions. Your register is major version {major}.{minor} while the tool awaits maximum version {Register.major_version}.{Register.minor_version} . Skipping the loading')
+                self.logger.error(f'Incompatible versions. Your register is major version {major}.{minor} while '
+                                  f'the tool awaits maximum version {Register.major_version}.{Register.minor_version} .'
+                                  f' Skipping the loading')
                 return
             
             # Remaining line to read until the end of the current subregister
@@ -161,7 +167,7 @@ class Register:
         self.logger.debug(f'Data from {file} successfully loaded')
 
     
-    def remove_accession(self, source, accession):
+    def remove_accession(self, source: str, accession: str) -> None:
         """
         Removes an accession from a source.
 
@@ -180,7 +186,7 @@ class Register:
             self.logger.warning(f"Accession {accession} not found in {source}")
 
 
-    def filter_accessions(self, source, regexps):
+    def filter_accessions(self, source: str, regexps: list[str]) -> list[str]:
         """ Returns the accessions from a given source that match at least one of the regexps.
 
         Args:
@@ -197,7 +203,7 @@ class Register:
         return [acc for acc in self.acc_by_src[source] if any(re.match(regexp, acc) for regexp in regexps)]
 
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Returns a string representation of the Register object.
 
@@ -209,7 +215,7 @@ class Register:
 
 # --- Register files load/save ---
 
-def load_source(sourcepath):
+def load_source(sourcepath: str) -> set[str]:
     # Empty file
     if not path.isfile(sourcepath):
         return set()
@@ -225,13 +231,13 @@ def load_source(sourcepath):
     return accessions
 
 
-def save_source(sourcepath, accessions):
+def save_source(sourcepath: str, accessions: list[str]) -> None:
     with open(sourcepath, 'w') as fw:
         for acc in accessions:
             print(acc, file=fw)
 
 
-def create_register(dirpath, logger, force=False):
+def create_register(dirpath: str, logger: logging.Logger, force: bool = False) -> Register:
     # Remove files if force reconstruction
     if force and path.exists(dirpath):
         rmtree(dirpath)
@@ -249,4 +255,3 @@ def create_register(dirpath, logger, force=False):
     reg.save_to_dir(dirpath)
 
     return reg
-

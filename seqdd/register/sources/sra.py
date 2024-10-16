@@ -1,13 +1,13 @@
+import logging
 from os import listdir, makedirs, path, remove
 import platform
 from shutil import rmtree, move
 import subprocess
-from sys import stderr
 from threading import Lock
 import time
 
 from seqdd.utils.download import check_binary
-from seqdd.utils.scheduler import CmdLineJob, FunctionJob
+from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
 naming = {
@@ -32,7 +32,7 @@ class SRA:
 
     """
     
-    def __init__(self, tmpdir, bindir, logger):
+    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         """
         Initialize the SRA downloader object.
 
@@ -50,7 +50,7 @@ class SRA:
         self.min_delay = 0.5
         self.last_sra_query = 0
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         """
         Checks if the SRA toolkit binaries are ready for use.
 
@@ -59,7 +59,7 @@ class SRA:
         """
         return self.binaries is not None
     
-    def sra_delay_ready(self):
+    def sra_delay_ready(self) -> bool:
         """
         Checks if the minimum delay between SRA queries has passed.
 
@@ -76,7 +76,7 @@ class SRA:
             self.mutex.release()
         return ready
     
-    def filter_valid_accessions(self, accessions):
+    def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of SRA accessions and returns only the valid ones.
 
@@ -90,7 +90,7 @@ class SRA:
         return accessions
 
     
-    def jobs_from_accessions(self, accessions, datadir):
+    def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing SRA datasets.
 
@@ -140,7 +140,10 @@ class SRA:
                 job.parents.append(prefetch_job)
 
             # Move to datadir and clean tmpdir
-            clean_job = FunctionJob(self.move_and_clean, func_args=(acc_dir, datadir), parents=fasterq_dump_jobs, name=f'{job_name}_clean')
+            clean_job = FunctionJob(self.move_and_clean,
+                                    func_args=(acc_dir, datadir),
+                                    parents=fasterq_dump_jobs,
+                                    name=f'{job_name}_clean')
 
             # Set the jobs
             jobs.append(prefetch_job)
@@ -150,7 +153,7 @@ class SRA:
         return jobs
     
 
-    def move_and_clean(self, accession_dir, outdir):
+    def move_and_clean(self, accession_dir: str, outdir: str) -> None:
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
@@ -176,7 +179,7 @@ class SRA:
 
     # ---- SRA specific jobs ----
 
-    def jobs_from_SRR(self, accession_dir, job_name):
+    def jobs_from_SRR(self, accession_dir: str, job_name: str) -> list[CmdLineJob, CmdLineJob]:
         # Split files
         cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
         fasterqdump_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_fasterqdump')
@@ -198,7 +201,7 @@ class SRA:
         return [SRXP_subjob]
     
 
-    def run_fasterqdump_from_SRXP(self, SRXP_directory):
+    def run_fasterqdump_from_SRXP(self, SRXP_directory: str) -> None:
         # TODO: Move log files to the log directory. Can be done after yielding.
         SRX_name = path.basename(SRXP_directory)
 
@@ -246,7 +249,7 @@ class SRA:
 
     # ---- Toolkit preparation ----
     
-    def download_sra_toolkit(self):
+    def download_sra_toolkit(self) -> dict[str, str]:
         """
         Downloads and installs the SRA toolkit if necessary, and returns the paths to the SRA toolkit binaries.
 
@@ -277,7 +280,7 @@ class SRA:
         # Install the software
         return self.install_sratoolkit()
 
-    def install_sratoolkit(self, version='3.1.1'):
+    def install_sratoolkit(self, version='3.1.1') -> dict[str, str]|None:
         """
         Downloads and installs the SRA toolkit with the specified version.
 

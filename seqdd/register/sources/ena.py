@@ -1,3 +1,4 @@
+import logging
 from os import listdir, makedirs, path
 import re
 from shutil import rmtree, move
@@ -5,7 +6,7 @@ import subprocess
 from threading import Lock
 import time
 
-from seqdd.utils.scheduler import CmdLineJob, FunctionJob
+from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
 naming = {
@@ -13,8 +14,6 @@ naming = {
     'key': 'ena',
     'classname': 'ENA'
 }
-
-
 
 
 class ENA:
@@ -42,7 +41,7 @@ class ENA:
     }
     
     
-    def __init__(self, tmpdir, bindir, logger):
+    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         """
         Initialize the ENA downloader object.
 
@@ -59,13 +58,13 @@ class ENA:
         self.min_delay = 0.35
         self.last_ena_query = 0
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         """
         No binaries, always ready.
         """
         return True
     
-    def ena_delay_ready(self):
+    def ena_delay_ready(self) -> bool :
         """
         Checks if the minimum delay between ENA queries has passed.
 
@@ -82,7 +81,7 @@ class ENA:
             self.mutex.release()
         return ready
     
-    def wait_my_turn(self):
+    def wait_my_turn(self) -> None:
         """
         Waits for the minimum delay between ENA queries.
         WARNING: The function acquires the mutex lock. You must release it after using this function.
@@ -94,7 +93,7 @@ class ENA:
     
     # --- ENA Job creations ---
 
-    def jobs_from_accessions(self, accessions, datadir):
+    def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing ENA datasets.
 
@@ -163,7 +162,8 @@ class ENA:
 
         return jobs
     
-    def jobs_from_assembly(self, assembly, tmpdir, outdir, job_name):
+    def jobs_from_assembly(self, assembly: str, tmpdir: str, outdir: str, job_name: str) \
+            -> list[CmdLineJob, CmdLineJob, FunctionJob]:
         """
         Creates a list of jobs for downloading and processing an assembly.
 
@@ -207,14 +207,13 @@ class ENA:
         return [curl_job, gzip_job, move_job]
     
     
-    def move_and_clean(self, accession_dir, outdir, md5s=None):
+    def move_and_clean(self, accession_dir: str, outdir: str, md5s: dict[str, str] | None = None) -> None:
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
         Args:
             accession_dir (str): The directory path containing the downloaded files.
             outdir (str): The output directory path.
-            tmpdir (str): The temporary directory path.
         """
         if md5s is not None:
             # Validate the MD5 hashes
@@ -225,7 +224,8 @@ class ENA:
                 md5_hash = md5_check.stdout.decode().split()[0]
                 # Check if the MD5 hash is correct
                 if md5 != md5_hash:
-                    self.logger.error(f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\nAccession files will not be downloaded.')
+                    self.logger.error(f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\n'
+                                      f'Accession files will not be downloaded.')
                     rmtree(accession_dir)
                     return
 
@@ -243,7 +243,7 @@ class ENA:
 
     # --- ENA accession validity ---
     
-    def filter_valid_accessions(self, accessions):
+    def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of ENA accessions and returns only the valid ones.
 
@@ -271,7 +271,7 @@ class ENA:
 
         return valid_accessions
 
-    def valid_accessions_on_API(self, accessions, query_size=32):
+    def valid_accessions_on_API(self, accessions: list[str], query_size: int = 32) -> list[str]:
         valid_accessions = []
         query_begin = 'https://www.ebi.ac.uk/ena/browser/api/xml/'
         query_end = '?download=false&gzip=false&includeLinks=false'
@@ -307,7 +307,7 @@ class ENA:
         return valid_accessions
     
 
-    def validate_accession(self, accession):
+    def validate_accession(self, accession: str) -> str:
         """
         Validates a given accession.
 
@@ -326,7 +326,7 @@ class ENA:
 
     # --- ENA FTP URL retrieval ---
 
-    def get_ena_ftp_url(self, accession):
+    def get_ena_ftp_url(self, accession: str) -> list[tuple[str, str]]:
         """
         Returns the ENA FTP URL(s) from an accession number.
         """
