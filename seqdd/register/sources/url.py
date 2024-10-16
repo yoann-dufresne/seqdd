@@ -1,17 +1,12 @@
+import logging
+from collections.abc import Iterable
 from os import path
 from urllib.parse import urlparse
 import subprocess
-from sys import stderr
 from threading import Lock
 import time
 
 from seqdd.utils.scheduler import CmdLineJob
-
-from threading import Lock
-import time
-import subprocess
-from urllib.parse import urlparse
-from os import path
 
 
 naming = {
@@ -39,7 +34,7 @@ class URL:
 
     """
 
-    def __init__(self, tmpdir, bindir, logger):
+    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         self.tmpdir = tmpdir
         self.bindir = bindir
         self.logger = logger
@@ -47,7 +42,7 @@ class URL:
         self.min_delay = .5
         self.last_query = 0
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         """
         Check if the URL downloader is ready.
 
@@ -56,7 +51,7 @@ class URL:
         """
         return True
 
-    def url_delay_ready(self):
+    def url_delay_ready(self) -> bool:
         """
         Checks if the minimum delay between URL queries has passed.
 
@@ -72,7 +67,7 @@ class URL:
             return ready
         return False
     
-    def remaining_time_before_next_query(self):
+    def remaining_time_before_next_query(self) -> float:
         """
         Calculates the remaining time before the next URL query can be made.
 
@@ -82,7 +77,7 @@ class URL:
         return max(0, self.min_delay - (time.time() - self.last_query))
 
     
-    def jobs_from_accessions(self, urls, datadir):
+    def jobs_from_accessions(self, urls: list[str], datadir: str) -> list[CmdLineJob]:
         """
         Create a list of jobs for downloading files from the given URLs.
 
@@ -104,7 +99,7 @@ class URL:
 
         return jobs
     
-    def get_filename(self, url):
+    def get_filename(self, url: str) -> str:
         """
         Get the filename from the server through the given URL.
 
@@ -137,7 +132,7 @@ class URL:
 
         return filename
 
-    def filter_valid_accessions(self, urls):
+    def filter_valid_accessions(self, urls: Iterable[str]):
         """
         Filter out invalid URLs and return a set of valid URLs.
 
@@ -147,7 +142,7 @@ class URL:
         Returns:
             set: A set of valid URLs.
         """
-        curl_schemes = set(('http', 'https', 'ftp'))
+        curl_schemes = {'http', 'https', 'ftp'}
 
         print("Filtering URLs...")
         valid_urls = set()

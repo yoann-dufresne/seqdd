@@ -1,7 +1,8 @@
 import argparse
+import tempfile
 from os import path
 from sys import stderr
-
+from tempfile import gettempdir
 import platform
 import re
 import logging
@@ -11,57 +12,103 @@ from seqdd.register.src_manager import SourceManager
 from seqdd.utils.download import DownloadManager
 
 
-
-def parse_cmd():
+def parse_cmd() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
                     epilog='Reproducibility is crutial, let\'s try to improve it!')
-    subparsers = parser.add_subparsers(dest='cmd', required=True, help='command to apply')
 
-
+    subparsers = parser.add_subparsers(dest='cmd',
+                                       required=True,
+                                       help='command to apply')
     # Init register command
-    init = subparsers.add_parser('init', help='Initialise the data register')
-    init.add_argument('-f', '--force', action='store_true', help='Force reconstruction of the register')
-    init.add_argument('-r', '--register-file', type=str, help='Init the local register from the register file')
+    init = subparsers.add_parser('init',
+                                 help='Initialise the data register')
+    init.add_argument('-f', '--force',
+                      action='store_true',
+                      help='Force reconstruction of the register')
+    init.add_argument('-r', '--register-file',
+                      type=str,
+                      help='Init the local register from the register file')
 
     # Add entries to the register
     add = subparsers.add_parser('add', help='Add dataset(s) to manage')
-    add.add_argument('-s', '--source', choices=SourceManager.source_keys(), help='Download source. Can download from ncbi genomes, sra or an arbitrary url (uses wget to download)', required=True)
-    add.add_argument('-a', '--accessions', nargs='+', default=[], help='List of accessions to register')
-    add.add_argument('-f', '--file-of-accessions', default="", help='A file containing accessions to download, 1 per line')
-    add.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
+    add.add_argument('-s', '--source',
+                     choices=SourceManager.source_keys(),
+                     help='Download source. Can download from ncbi genomes, '
+                          'sra or an arbitrary url (uses wget to download)',
+                     required=True)
+    add.add_argument('-a', '--accessions',
+                     nargs='+',
+                     default=[],
+                     help='List of accessions to register')
+    add.add_argument('-f', '--file-of-accessions',
+                     default="",
+                     help='A file containing accessions to download, 1 per line')
+    add.add_argument('-t', '--tmp-directory',
+                     default=path.join(tempfile.gettempdir(), 'seqdd'),
+                     help='Temporary directory to store and organize the downloaded files')
 
     # Download entries from the register
-    download = subparsers.add_parser('download', help='Download data from the register. The download process needs sra-tools, ncbi command-line tools and wget.')
-    download.add_argument('-d', '--download-directory', default='data', help='Directory where all the data will be downloaded')
-    download.add_argument('-p', '--max-processes', type=int, default=8, help='Maximum number of processes to run in parallel.')
-    download.add_argument('-t', '--tmp-directory', default='/tmp/seqdd', help='Temporary directory to store and organize the downloaded files')
-    download.add_argument('--log-directory', default='logs', help='Directory where all the logs will be stored')
+    download = subparsers.add_parser('download',
+                                     help='Download data from the register. '
+                                          'The download process needs sra-tools, ncbi command-line tools and wget.')
+    download.add_argument('-d', '--download-directory',
+                          default='data', help='Directory where all the data will be downloaded')
+    download.add_argument('-p', '--max-processes',
+                          type=int,
+                          default=8,
+                          help='Maximum number of processes to run in parallel.')
+    download.add_argument('-t', '--tmp-directory',
+                          default='/tmp/seqdd',
+                          help='Temporary directory to store and organize the downloaded files')
+    download.add_argument('--log-directory',
+                          default='logs',
+                          help='Directory where all the logs will be stored')
 
     # Export the register
-    export = subparsers.add_parser('export', help='Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.')
-    export.add_argument('-o', '--output-register', type=str, default='myregister.reg', help='Name of the register file. Please prefer filenames .reg terminated.')
+    export = subparsers.add_parser('export',
+                                   help='Export the metadata into a .reg file. '
+                                        'This file can be loaded from other locations to download the exact same data.')
+    export.add_argument('-o', '--output-register',
+                        type=str, default='myregister.reg',
+                        help='Name of the register file. Please prefer filenames .reg terminated.')
 
     # List the datasets from the register
-    lst = subparsers.add_parser('list', help='List all the datasets from the register. Subregisters are listed one after the other. 5 accessions are displayed per line (tabulation separated).')
-    lst.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='List only the datasets from the given source. If not specified, list all the datasets.')
-    lst.add_argument('-r', '--regular-expressions', nargs='+', default=[''], help='List only the datasets accessions that match at least one of the given regular expressions')
+    lst = subparsers.add_parser('list',
+                                help='List all the datasets from the register. '
+                                     'Subregisters are listed one after the other. '
+                                     '5 accessions are displayed per line (tabulation separated).')
+    lst.add_argument('-s', '--source',
+                     choices=['ncbi', 'sra', 'url'],
+                     help='List only the datasets from the given source. If not specified, list all the datasets.')
+    lst.add_argument('-r', '--regular-expressions',
+                     nargs='+',
+                     default=[''],
+                     help='List only the datasets accessions that match at least one of the given regular expressions')
 
     # Delete accessions from the register
-    remove = subparsers.add_parser('remove', help='Remove dataset(s) from the register')
-    remove.add_argument('-s', '--source', choices=['ncbi', 'sra', 'url'], help='Delete only from the given source. If not specified, removed from all the sources.')
-    remove.add_argument('-a', '--accessions', nargs='+', help='List of accessions to remove from the register. Each accession can be a regular expression.')
+    remove = subparsers.add_parser('remove',
+                                   help='Remove dataset(s) from the register')
+    remove.add_argument('-s', '--source',
+                        choices=['ncbi', 'sra', 'url'],
+                        help='Delete only from the given source. If not specified, removed from all the sources.')
+    remove.add_argument('-a', '--accessions',
+                        nargs='+',
+                        help='List of accessions to remove from the register. '
+                             'Each accession can be a regular expression.')
     
     # Shared arguments
     for subparser in subparsers.choices.values():
-        subparser.add_argument('--register-location', default='.register', help='Directory that store all info for the register')
+        subparser.add_argument('--register-location',
+                               default='.register',
+                               help='Directory that store all info for the register')
 
     args = parser.parse_args()
     return args
 
 
-def on_remove(args, logger):
+def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
      # validate the regexps
     valid_regexp = []
     for regexp in args.accessions:
@@ -80,7 +127,7 @@ def on_remove(args, logger):
     reg.save_to_dir(args.register_location)
 
 
-def on_list(args, logger):
+def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
     # validate the regexps
     valid_regexp = []
     for regexp in args.regular_expressions:
@@ -102,7 +149,7 @@ def on_list(args, logger):
                 print("\t".join(current_slice))
 
 
-def on_init(args, logger):
+def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
     logger.info('Init register')
     location = args.register_location
     register = create_register(location, logger, force=args.force)
@@ -112,7 +159,7 @@ def on_init(args, logger):
     logger.info(f'Created at location {args.register_location}')
 
 
-def on_add(args, logger):
+def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     # Getting the file to the sources
     src_path = path.join(args.register_location, f"{args.source}.txt")
     bin_dir = path.join(args.register_location, 'bin')
@@ -145,7 +192,7 @@ def on_add(args, logger):
         save_source(src_path, accessions)
 
 
-def on_download(args, logger):
+def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
     bindir = path.join(args.register_location, 'bin')
     src_manager = SourceManager(args.tmp_directory, bindir, logger)
     reg = Register(logger, dirpath=args.register_location)
@@ -153,13 +200,13 @@ def on_download(args, logger):
     dm.download_to(args.download_directory, args.log_directory , args.max_processes)
 
 
-def on_export(args, logger):
+def on_export(args: argparse.Namespace, logger:logging.Logger) -> None:
     reg = Register(logger, dirpath=args.register_location)
     reg.save_to_file(args.output_register)
     logger.info(f"Register exported to {args.output_register}")
 
 
-def main():
+def main() -> None:
     # Platform check
     system = platform.system()
     if system == 'Windows':
