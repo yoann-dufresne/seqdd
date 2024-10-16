@@ -1,14 +1,19 @@
+from __future__ import annotations
+
+from collections.abc import Iterable, Callable
+import logging
 from os import path
 import sys
 from threading import Thread
 from multiprocessing import Process, Event
 import subprocess
 import time
+from typing import Any
 
 
 class JobManager(Thread):
 
-    def __init__(self, logger, max_process=8, log_folder=None):
+    def __init__(self, logger: logging.Logger, max_process: int = 8, log_folder: str|None = None) -> None:
         super().__init__()
         # Jobs queues
         self.processes = []
@@ -23,10 +28,10 @@ class JobManager(Thread):
         self.stopped = Event()
         self.stopped.clear()
 
-    def stop(self):
+    def stop(self) -> None:
         self.stopped.set()
 
-    def run(self):
+    def run(self) -> None:
         # Run the tasks
         while not self.stopped.is_set():
             # Check currently running processes
@@ -50,7 +55,6 @@ class JobManager(Thread):
                 elif not notified:
                     self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
                     self.logger.error(f'Please check the log file for more details: {job.log_file}')
-
 
             # Add new processes
             to_remove = []
@@ -80,7 +84,7 @@ class JobManager(Thread):
                 job.stop()
                 job.join()
 
-    def cancel_job(self, job):
+    def cancel_job(self, job: Job) -> None:
         self.logger.warning(f'CANCEL {job}')
         # Cancel descendance
         if job in self.dependancies:
@@ -94,7 +98,7 @@ class JobManager(Thread):
             self.waiting.remove(job)
         job.stop()        
 
-    def add_job(self, process):
+    def add_job(self, process: Job):
         # Modify the log file path
         if self.log_folder is not None:
             logfile_base = path.basename(process.log_file)
@@ -111,10 +115,10 @@ class JobManager(Thread):
         self.waiting.append(process)
         self.processes.append(process)
 
-    def remaining_jobs(self):
+    def remaining_jobs(self) -> int:
         return len(self.waiting) + len(self.running)
 
-    def add_jobs(self, processes):
+    def add_jobs(self, processes: Iterable[Job]) -> None:
         for p in processes:
             # Add the process
             self.add_job(p)
@@ -142,7 +146,9 @@ class Job:
     can_start : Function
         A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
     """
-    def __init__(self, name=None, parents=None, can_start=lambda:True, log_file=None):
+    def __init__(self, name: str|None =None, parents: list[Job]|None =None,
+                 can_start: Callable = lambda:True,
+                 log_file:str|None = None) -> None:
         """
         Constructs all the necessary attributes for the person object.
 
@@ -162,10 +168,10 @@ class Job:
         self.process = None
         self.can_start = can_start
 
-    def set_log_file(self, log_file):
+    def set_log_file(self, log_file: str) -> None:
         self.log_file = log_file
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         # Already over
         if self.is_over:
             return False
@@ -192,7 +198,9 @@ class FunctionJob(Job):
     '''
     A Job class that wrap a function to run in a subprocess.
     '''
-    def __init__(self, func_to_run, func_args=(), parents=None, can_start=lambda:True, name=None, log_file=None):
+    def __init__(self, func_to_run: Callable, func_args: tuple[Any, ...] = (),
+                 parents: list[Job] = None, can_start: Callable = lambda:True,
+                 name: str|None = None, log_file: str|None = None):
         '''
             Parameters
             ----------
@@ -213,7 +221,7 @@ class FunctionJob(Job):
         self.process = Process(target=self.wrapping_function, args=())
 
 
-    def wrapping_function(self):
+    def wrapping_function(self) -> None:
         with open(self.log_file, 'w') as fw:
             sys.stdout = fw
             sys.stderr = fw
@@ -226,11 +234,11 @@ class FunctionJob(Job):
                 print(e, file=fw)
                 raise e
 
-    def start(self):
+    def start(self) -> None:
         self.process.start()
 
 
-    def stop(self):
+    def stop(self) -> None:
         self.is_over = True
         if self.process is None:
             return
@@ -241,15 +249,15 @@ class FunctionJob(Job):
         if self.process.is_alive():
             self.process.terminate()
 
-    def get_returncode(self):
+    def get_returncode(self) -> int|None:
         if self.process is None:
             return None
         return self.process.exitcode
 
-    def join(self):
+    def join(self) -> None:
         self.process.join()
 
-    def is_alive(self):
+    def is_alive(self) -> bool:
         alive = self.process.is_alive()
         if not alive:
             self.is_over = True
@@ -264,7 +272,10 @@ class CmdLineJob(Job):
     '''
     A Job class that wrap a command line to run in a subprocess.
     '''
-    def __init__(self, command_line, parents=None, can_start=lambda:True, name=None, log_file=None):
+    def __init__(self, command_line: str, parents: list[Job]=None,
+                 can_start: Callable = lambda:True,
+                 name: str = None,
+                 log_file: str = None) -> None:
         '''
             Parameters
             ----------
@@ -280,11 +291,11 @@ class CmdLineJob(Job):
         super().__init__(parents=parents, can_start=can_start, name=name, log_file=log_file)
         self.cmd = command_line
 
-    def start(self):
+    def start(self) -> None:
         with open(self.log_file, 'w') as fw:
             self.process = subprocess.Popen(self.cmd, shell=True, stdout=fw, stderr=fw)
 
-    def stop(self):
+    def stop(self) -> None:
         self.is_over = True
         if self.process is None:
             return
@@ -294,23 +305,23 @@ class CmdLineJob(Job):
         if self.process.returncode is None:
             self.process.terminate()
 
-    def is_alive(self):
+    def is_alive(self) -> bool:
         alive = self.process.poll() is None
         if not alive:
             self.is_over = True
             self.process.communicate()
         return alive
 
-    def get_returncode(self):
+    def get_returncode(self) -> int|None:
         if self.process is None:
             return None
         if self.is_alive():
             return None
         return self.process.returncode
 
-    def join(self):
+    def join(self) -> None:
         self.process.communicate()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'CmdLineJob [ {self.cmd} ]'
         
