@@ -16,14 +16,17 @@ def parse_cmd() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
-                    epilog='Reproducibility is crutial, let\'s try to improve it!')
+                    epilog='Reproducibility is crutial, let\'s try to improve it!',
+                    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     subparsers = parser.add_subparsers(dest='cmd',
                                        required=True,
                                        help='command to apply')
     # Init register command
     init = subparsers.add_parser('init',
-                                 help='Initialise the data register')
+                                 help='Initialise the data register',
+                                 formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     init.add_argument('-f', '--force',
                       action='store_true',
                       help='Force reconstruction of the register')
@@ -32,7 +35,9 @@ def parse_cmd() -> argparse.Namespace:
                       help='Init the local register from the register file')
 
     # Add entries to the register
-    add = subparsers.add_parser('add', help='Add dataset(s) to manage')
+    add = subparsers.add_parser('add',
+                                help='Add dataset(s) to manage',
+                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     add.add_argument('-s', '--source',
                      choices=SourceManager.source_keys(),
                      help='Download source. Can download from ncbi genomes, '
@@ -52,7 +57,8 @@ def parse_cmd() -> argparse.Namespace:
     # Download entries from the register
     download = subparsers.add_parser('download',
                                      help='Download data from the register. '
-                                          'The download process needs sra-tools, ncbi command-line tools and wget.')
+                                          'The download process needs sra-tools, ncbi command-line tools and wget.',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     download.add_argument('-d', '--download-directory',
                           default='data', help='Directory where all the data will be downloaded')
     download.add_argument('-p', '--max-processes',
@@ -69,7 +75,8 @@ def parse_cmd() -> argparse.Namespace:
     # Export the register
     export = subparsers.add_parser('export',
                                    help='Export the metadata into a .reg file. '
-                                        'This file can be loaded from other locations to download the exact same data.')
+                                        'This file can be loaded from other locations to download the exact same data.',
+                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     export.add_argument('-o', '--output-register',
                         type=str, default='myregister.reg',
                         help='Name of the register file. Please prefer filenames .reg terminated.')
@@ -78,7 +85,8 @@ def parse_cmd() -> argparse.Namespace:
     lst = subparsers.add_parser('list',
                                 help='List all the datasets from the register. '
                                      'Subregisters are listed one after the other. '
-                                     '5 accessions are displayed per line (tabulation separated).')
+                                     '5 accessions are displayed per line (tabulation separated).',
+                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     lst.add_argument('-s', '--source',
                      choices=['ncbi', 'sra', 'url'],
                      help='List only the datasets from the given source. If not specified, list all the datasets.')
@@ -89,7 +97,8 @@ def parse_cmd() -> argparse.Namespace:
 
     # Delete accessions from the register
     remove = subparsers.add_parser('remove',
-                                   help='Remove dataset(s) from the register')
+                                   help='Remove dataset(s) from the register',
+                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     remove.add_argument('-s', '--source',
                         choices=['ncbi', 'sra', 'url'],
                         help='Delete only from the given source. If not specified, removed from all the sources.')
