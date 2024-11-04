@@ -114,11 +114,16 @@ class NCBI:
         Returns:
             list: A list of jobs for downloading and processing accessions.
         """
-        accessions = list(accessions)
+        to_download = []
+        for acc in accessions:
+            if path.exists(path.join(dest_dir, acc)):
+                self.logger.warning(f'Accession {acc} already exists in the destination directory. Skipping download.')
+            else:
+                to_download.append(acc)
         all_jobs = []
 
         # Download accessions by batch of 5
-        for idx in range(0, len(accessions), 5):
+        for idx in range(0, len(to_download), 5):
             # Create a temporary directory for the current job
             tmp_dir = path.join(self.tmp_dir, f'ncbi_{NCBI.ncbi_joib_id}')
             makedirs(tmp_dir, exist_ok=True)
@@ -127,7 +132,7 @@ class NCBI:
             NCBI.ncbi_joib_id += 1
 
             # Take the right slice of 5 accessions
-            acc_slice = accessions[idx:idx+5]
+            acc_slice = to_download[idx:idx+5]
 
             # Download dehydrated job
             download_file = path.join(tmp_dir, f'{job_name}.zip')
