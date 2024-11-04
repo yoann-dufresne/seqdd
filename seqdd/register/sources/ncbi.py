@@ -1,3 +1,6 @@
+import logging
+import threading
+from collections.abc import Iterable
 from os import listdir, makedirs, path
 import platform
 from shutil import rmtree, move
@@ -6,7 +9,7 @@ from sys import stderr
 from threading import Lock
 import time
 
-from seqdd.utils.scheduler import CmdLineJob, FunctionJob
+from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
 from seqdd.utils.download import check_binary
 import json
 
@@ -45,7 +48,7 @@ class NCBI:
 
     ncbi_joib_id = 0
 
-    def __init__(self, tmpdir, bindir, logger):
+    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         """
         Initializes a new instance of the NCBI downloader class.
 
@@ -62,7 +65,7 @@ class NCBI:
         self.bin = self.get_download_software()
         self.last_ncbi_query = 0
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         """
         Checks if the NCBI download software is ready.
 
@@ -71,7 +74,7 @@ class NCBI:
         """
         return self.bin is not None
     
-    def ncbi_delay_ready(self):
+    def ncbi_delay_ready(self) -> bool:
         """
         Checks if the minimum delay between NCBI queries has passed.
 
@@ -90,7 +93,7 @@ class NCBI:
             self.mutex.release()
         return ready
     
-    def wait_ncbi_delay(self):
+    def wait_ncbi_delay(self) -> threading.Lock:
         """
             Wait for the NCBI ressource to be available (some delay between queries must be waited). Once the delay has passed, it acquires a mutex lock to ensure that no other operation is queriing instead.
 
@@ -103,7 +106,7 @@ class NCBI:
         self.mutex.acquire()
         return self.mutex
     
-    def jobs_from_accessions(self, accessions, dest_dir):
+    def jobs_from_accessions(self, accessions: list[str], dest_dir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing accessions.
 
@@ -136,24 +139,35 @@ class NCBI:
 
             # Download dehydrated job
             download_file = path.join(tmp_dir, f'{job_name}.zip')
-            download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --no-progressbar --filename {download_file} {' '.join(acc_slice)}", can_start=self.ncbi_delay_ready, name=f'{job_name}_download')
+            download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --no-progressbar "
+                                      f"--filename {download_file} {' '.join(acc_slice)}",
+                                      can_start=self.ncbi_delay_ready,
+                                      name=f'{job_name}_download')
             
             # Unzip Job
             unzip_dir = path.join(tmp_dir, job_name)
-            unzip_job = CmdLineJob(f"unzip -n {download_file} -d {unzip_dir}", parents=[download_job], name=f'{job_name}_unzip')
+            unzip_job = CmdLineJob(f"unzip -n {download_file} -d {unzip_dir}",
+                                   parents=[download_job],
+                                   name=f'{job_name}_unzip')
 
             # Data download
-            rehydrate_job = CmdLineJob(f"{self.bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}", parents=[unzip_job], can_start=self.ncbi_delay_ready, name=f'{job_name}_rehydrate')
+            rehydrate_job = CmdLineJob(f"{self.bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}",
+                                       parents=[unzip_job],
+                                       can_start=self.ncbi_delay_ready,
+                                       name=f'{job_name}_rehydrate')
 
             # Data reorganization
-            reorg_job = FunctionJob(self.clean, func_args=(unzip_dir, dest_dir, tmp_dir), parents=[rehydrate_job], name=f'{job_name}_clean')
+            reorg_job = FunctionJob(self.clean,
+                                    func_args=(unzip_dir, dest_dir, tmp_dir),
+                                    parents=[rehydrate_job],
+                                    name=f'{job_name}_clean')
 
             all_jobs.extend([download_job, unzip_job, rehydrate_job, reorg_job])
 
         return all_jobs
 
 
-    def clean(self, unzip_dir, dest_dir, tmp_dir):
+    def clean(self, unzip_dir: str, dest_dir: str, tmp_dir: str) -> None:
         """
         Cleans up the downloaded files and moves them to the destination directory.
 
@@ -177,7 +191,8 @@ class NCBI:
         rmtree(tmp_dir)
 
 
-    def is_valid_acc_format(self, acc):
+    @staticmethod
+    def is_valid_acc_format(acc: str) -> bool:
         """
         Check if the given accession number is in a valid format.
         An accession number is considered valid if it:
@@ -204,7 +219,7 @@ class NCBI:
         return True
     
 
-    def filter_valid_accessions(self, accessions):
+    def filter_valid_accessions(self, accessions: set[str]) -> set[str]:
         """
         Filters and validates a list of accessions.
 
@@ -217,7 +232,8 @@ class NCBI:
         accessions_list = [acc for acc in accessions if self.is_valid_acc_format(acc)]
         invalid_accessions = list(accessions - set(accessions_list))
         if len(invalid_accessions) > 0:
-            self.logger.warning(f'Wrong format accessions: {", ".join(invalid_accessions)}. Expectiing GCA_XXXXXXXXX.Y or GCF_XXXXXXXXX.Y')
+            self.logger.warning(f'Wrong format accessions: {", ".join(invalid_accessions)}. '
+                                f'Expectiing GCA_XXXXXXXXX.Y or GCF_XXXXXXXXX.Y')
 
         valid_accessions = set()
         unknown_accessions = set()
@@ -259,7 +275,7 @@ class NCBI:
         return valid_accessions
     
 
-    def get_download_software(self):
+    def get_download_software(self) -> str|None:
         """
         Checks if the NCBI download software is installed and returns the path.
 
@@ -280,7 +296,7 @@ class NCBI:
         # Install the software
         return self.install_datasets_software()
 
-    def install_datasets_software(self):
+    def install_datasets_software(self) -> str|None:
         """
         Installs the NCBI download software if it is not already installed.
 
@@ -304,7 +320,10 @@ class NCBI:
 
         # Message to potential system extensions
         if not supported:
-            self.logger.error(f'ncbi datasets auto-install is not yet supported on your system. Plese install ncbi datasets cli by yourself. Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:\nsystem={system}\tplateform={platform.machine()}')
+            self.logger.error(f'ncbi datasets auto-install is not yet supported on your system. '
+                              f'Plese install ncbi datasets cli by yourself. '
+                              f'Also maybe we can include your system in the auto-installer. '
+                              f'Please submit an issue on github with the following values:\nsystem={system}\tplateform={platform.machine()}')
             return None
 
         # Download datasets

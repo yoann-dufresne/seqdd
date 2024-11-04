@@ -5,13 +5,15 @@ import subprocess
 import time
 
 from seqdd.utils.scheduler import JobManager
-
+from ..register.reg_manager import Register
+from ..register.src_manager import SourceManager
 
 # -------------------- Global download manager --------------------
 
 class DownloadManager:
 
-    def __init__(self, register, src_manager, logger, bindir='bin', tmpdir='/tmp'):
+    def __init__(self, register: Register, src_manager: SourceManager,
+                 logger: str, bindir: str ='bin', tmpdir: str ='/tmp'):
         self.register = register
 
         self.bindir = bindir
