@@ -33,7 +33,7 @@ class Logan:
     # 'SRR[0-9]{6,}'
     
     
-    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
+    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, unitigs: bool = False) -> None:
         """
         Initialize the ENA downloader object.
 
@@ -45,10 +45,26 @@ class Logan:
         self.tmpdir = tmpdir
         self.bindir = bindir
         self.logger = logger
+
+        self.unitigs = unitigs
         
         self.mutex = Lock()
         self.min_delay = 0.35
         self.last_query = 0
+
+    def set_option(self, option: str, value: str) -> None:
+        """
+        Sets an option for the downloader.
+
+        Args:
+            option (str): The option name.
+            value (str): The option value.
+        """
+        if option == 'unitigs':
+            self.unitigs = value == 'True'
+        else:
+            self.logger.warning(f'Unknown option: {option}')
+
 
     def is_ready(self) -> bool:
         """
@@ -117,9 +133,17 @@ class Logan:
                 rmtree(tmp_dir)
             makedirs(tmp_dir)
 
+            acc, type = acc.split('_')
+
             # Get the file name from the URL
-            filename = f'{acc}.contigs.fa.zst'
-            url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{filename}'
+            filename = None
+            url = None
+            if type == 'unitigs':
+                filename = f'{acc}.unitigs.fa.zst'
+                url = f'https://s3.amazonaws.com/logan-pub/u/{acc}/{filename}'
+            else:
+                filename = f'{acc}.contigs.fa.zst'
+                url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{filename}'
             # Create the output file path
             output_file = path.join(tmp_dir, filename)
             # Create the command line job
@@ -127,20 +151,6 @@ class Logan:
                 command_line=f'curl -s -o {output_file} "{url}"',
                 can_start = self.logan_delay_ready,
                 name=f'{job_name}_download'
-            ))
-
-            # Decompress the file
-            jobs.append(CmdLineJob(
-                command_line=f'zstd --rm -d {output_file}',
-                parents=[jobs[-1]],
-                name=f'{job_name}_decompress'
-            ))
-
-            # Gzip the file
-            jobs.append(CmdLineJob(
-                command_line=f'gzip {output_file[:-4]}',
-                parents=[jobs[-1]],
-                name=f'{job_name}_gzip'
             ))
             
             # Create a function job to move the files to the final directory
@@ -188,7 +198,11 @@ class Logan:
                 continue
 
             # Check if the accession is present on the Amazon S3 bucket
-            url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{acc}.contigs.fa.zst'
+            url = None
+            if self.unitigs:
+                url = f'https://s3.amazonaws.com/logan-pub/u/{acc}/{acc}.unitigs.fa.zst'
+            else:
+                url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{acc}.contigs.fa.zst'
             response = subprocess.run(['curl', '-I', url], capture_output=True)
             if response.returncode != 0:
                 self.logger.error(f'Error querying Logan/SRA\nQuery: {url}\nAnswer: {response.stderr.decode()}')
@@ -197,6 +211,7 @@ class Logan:
                 self.logger.warning(f'Contigs of the accession not found on the Amazon S3 bucket: {acc}')
                 continue
             
+            acc = f"{acc}_{'unitigs' if self.unitigs else 'contigs'}"
             valid_accessions.append(acc)
 
         return valid_accessions

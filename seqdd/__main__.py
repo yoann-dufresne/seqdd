@@ -53,6 +53,7 @@ def parse_cmd() -> argparse.Namespace:
     add.add_argument('-t', '--tmp-directory',
                      default=path.join(tempfile.gettempdir(), 'seqdd'),
                      help='Temporary directory to store and organize the downloaded files')
+    add.add_argument('--unitigs', action='store_true', help='Download unitigs instead of contigs for logan accessions.')
 
     # Download entries from the register
     download = subparsers.add_parser('download',
@@ -114,6 +115,10 @@ def parse_cmd() -> argparse.Namespace:
                                help='Directory that store all info for the register')
 
     args = parser.parse_args()
+
+    if args.cmd == 'add' and args.unitigs and args.source != 'logan':
+        parser.error('--unitigs is only available for Logan source')
+
     return args
 
 
@@ -190,6 +195,8 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
 
     # Verification of the accessions
     src_manip = src_mng.sources[args.source]
+    if args.unitigs:
+        src_manip.set_option('unitigs', str(args.unitigs))
     valid_accessions = src_manip.filter_valid_accessions(frozenset(new_accessions))
     
     # Add valid accessions
