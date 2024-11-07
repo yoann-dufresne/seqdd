@@ -131,7 +131,7 @@ class Logan:
 
             # Decompress the file
             jobs.append(CmdLineJob(
-                command_line=f'zstd -d {output_file}',
+                command_line=f'zstd --rm -d {output_file}',
                 parents=[jobs[-1]],
                 name=f'{job_name}_decompress'
             ))
@@ -189,7 +189,7 @@ class Logan:
 
             # Check if the accession is present on the Amazon S3 bucket
             url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{acc}.contigs.fa.zst'
-            response = subprocess.run(['curl', '-I', url])
+            response = subprocess.run(['curl', '-I', url], capture_output=True)
             if response.returncode != 0:
                 self.logger.error(f'Error querying Logan/SRA\nQuery: {url}\nAnswer: {response.stderr.decode()}')
                 continue
