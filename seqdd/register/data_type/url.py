@@ -42,15 +42,6 @@ class URL:
         self.min_delay = .5
         self.last_query = 0
 
-    def is_ready(self) -> bool:
-        """
-        Check if the URL downloader is ready.
-
-        Returns:
-            bool: True if the URL downloader is ready, False otherwise.
-        """
-        return True
-
     def url_delay_ready(self) -> bool:
         """
         Checks if the minimum delay between URL queries has passed.

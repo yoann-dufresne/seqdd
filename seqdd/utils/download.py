@@ -48,11 +48,8 @@ class DownloadManager:
             manipulator = self.src_manager.get(source)
 
             if len(reg) > 0:
-                if manipulator.is_ready():
-                    jobs[source] = manipulator.jobs_from_accessions(reg, datadir)
-                    self.logger.info(f'{len(reg)} datasets from {source} will be downloaded.')
-                else:
-                    self.logger.warning(f'{source} datasets cannot be downloaded because the downloader is not ready. Skipping {len(reg)} datasets.', file=stderr)
+                jobs[source] = manipulator.jobs_from_accessions(reg, datadir)
+                self.logger.info(f'{len(reg)} datasets from {source} will be downloaded.')
 
         # Create a JobManager instance
         manager = JobManager(max_process=max_process, log_folder=logdir, logger=self.logger)

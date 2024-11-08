@@ -9,12 +9,6 @@ import time
 from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
-naming = {
-    'name': 'ENA',
-    'key': 'ena',
-    'classname': 'ENA'
-}
-
 
 class ENA:
     """
@@ -58,11 +52,6 @@ class ENA:
         self.min_delay = 0.35
         self.last_ena_query = 0
 
-    def is_ready(self) -> bool:
-        """
-        No binaries, always ready.
-        """
-        return True
     
     def ena_delay_ready(self) -> bool :
         """
