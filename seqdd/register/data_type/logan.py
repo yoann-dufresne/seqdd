@@ -64,13 +64,6 @@ class Logan:
             self.unitigs = value == 'True'
         else:
             self.logger.warning(f'Unknown option: {option}')
-
-
-    def is_ready(self) -> bool:
-        """
-        No binaries, always ready.
-        """
-        return True
     
     def logan_delay_ready(self) -> bool :
         """

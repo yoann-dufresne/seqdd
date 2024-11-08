@@ -32,7 +32,7 @@ class SourceManager:
     @staticmethod
     def list_and_load_sources() -> list[ModuleType]:
         # Charger le module principal
-        src_module_name = 'seqdd.register.data_sources'
+        src_module_name = 'seqdd.register.data_type'
         module = importlib.import_module(src_module_name)
         
         # Lister les sous-modules
