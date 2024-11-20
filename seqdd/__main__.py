@@ -14,7 +14,7 @@ from seqdd.utils.download import DownloadManager
 def threads_available() -> int:
     """
 
-    Returns: The maximal number of threads available.
+    :returns: The maximal number of threads available.
              It's nice with cluster scheduler or linux.
              On Mac it uses the number of physical cores
     """
@@ -28,12 +28,10 @@ def threads_available() -> int:
 
 def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     """
+    Parse the command line
 
-    Args:
-        logger: The object to log message
-
-    Returns: the command line argument and options parsed
-
+    :param logger: The object to log message
+    :returns: the command line argument and options parsed
     """
     max_threads_available = threads_available()
     parser = argparse.ArgumentParser(
@@ -149,10 +147,8 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     function corresponding to sub command `remove`
 
-    Args:
-        args: The parsed cmd line arguments
-        logger: The object to log
-
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
     """
      # validate the regexps
     valid_regexp = []
@@ -176,10 +172,8 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     function corresponding to 'list' sub command
 
-    Args:
-        args: The parsed cmd line arguments
-        logger: The object to log
-
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
     """
     # validate the regexps
     valid_regexp = []
@@ -206,10 +200,8 @@ def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     function corresponding to 'init' sub command
 
-    Args:
-        args: The parsed cmd line arguments
-        logger: The object to log
-
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
     """
     logger.info('Init register')
     location = args.register_location
@@ -224,11 +216,9 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     function corresponding to 'add' sub command
 
-    Args:
-        args: The parsed cmd line arguments
-        logger: The object to log
-
-      """
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
     # Getting the file to the sources
     src_path = os.path.join(args.register_location, f"{args.source}.txt")
     bin_dir = os.path.join(args.register_location, 'bin')
@@ -265,10 +255,8 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     function corresponding to 'download' sub command
 
-     Args:
-        args: The parsed cmd line arguments
-        logger: The object to log
-
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
     """
     bindir = os.path.join(args.register_location, 'bin')
     src_manager = SourceManager(args.tmp_directory, bindir, logger)
@@ -281,10 +269,8 @@ def on_export(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     function corresponding to 'export' sub command
 
-    Args:
-        args: The parsed cmd line arguments
-        logger: The object to log
-
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
     """
     reg = Register(logger, dirpath=args.register_location)
     reg.save_to_file(args.output_register)
@@ -294,7 +280,6 @@ def on_export(args: argparse.Namespace, logger:logging.Logger) -> None:
 def main() -> None:
     """
     main entry point to seqdd
-
     """
     # Platform check
     system = platform.system()

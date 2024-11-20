@@ -20,14 +20,12 @@ class ENA:
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
 
-    Attributes:
-        tmpdir (str): The temporary directory path.
-        bindir (str): The binary directory path.
-        logger: The logger object for logging messages.
-        mutex: A lock object for thread synchronization.
-        min_delay (float): The minimum delay between ENA queries in seconds.
-        last_ena_query (float): The timestamp of the last ENA query.
-
+    :param tmpdir: The temporary directory path.
+    :param bindir: The binary directory path.
+    :param logger: The logger object for logging messages.
+    :param mutex: A lock object for thread synchronization.
+    :param min_delay: The minimum delay between ENA queries in seconds.
+    :param last_ena_query: The timestamp of the last ENA query.
     """
 
     # Regular expression for each type of ENA accession
@@ -45,10 +43,9 @@ class ENA:
         """
         Initialize the ENA downloader object.
 
-        Args:
-            tmpdir (str): The temporary directory path.
-            bindir (str): The binary directory path.
-            logger: The logger object.
+        :param tmpdir: The temporary directory path.
+        :param bindir: The binary directory path.
+        :param logger: The logger object.
         """
         self.tmpdir = tmpdir
         self.bindir = bindir
@@ -68,8 +65,7 @@ class ENA:
         """
         Checks if the minimum delay between ENA queries has passed.
 
-        Returns:
-            bool: True if the minimum delay has passed, False otherwise.
+        :returns: bool True if the minimum delay has passed, False otherwise.
         """
         # Minimal delay between SRA queries (0.5s)
         locked = self.mutex.acquire(blocking=False)
@@ -84,7 +80,11 @@ class ENA:
     def wait_my_turn(self) -> None:
         """
         Waits for the minimum delay between ENA queries.
-        WARNING: The function acquires the mutex lock. You must release it after using this function.
+
+        .. _warning:
+
+            The function acquires the mutex lock. You must release it after using this function.
+
         """
         while not self.ena_delay_ready():
             time.sleep(0.01)
@@ -97,12 +97,9 @@ class ENA:
         """
         Generates a list of jobs for downloading and processing ENA datasets.
 
-        Args:
-            accessions (list): A list of ENA accessions.
-            datadir (str): The output directory path.
-
-        Returns:
-            list: A list of jobs for downloading and processing ENA datasets.
+        :param accessions: A list of ENA accessions.
+        :param datadir: The output directory path.
+        :returns: A list of jobs for downloading and processing ENA datasets.
         """
         jobs = []
 
@@ -167,11 +164,10 @@ class ENA:
         """
         Creates a list of jobs for downloading and processing an assembly.
 
-        Args:
-            assembly (str): The assembly accession.
-            tmpdir (str): The temporary directory path.
-            outdir (str): The output directory path.
-            job_name (str): The name of the job.
+        :param assembly: The assembly accession.
+        :param tmpdir: The temporary directory path.
+        :param outdir: The output directory path.
+        :param job_name: The name of the job.
 
         Returns:
             list: A list of jobs for downloading and processing an assembly.
@@ -209,11 +205,13 @@ class ENA:
     
     def move_and_clean(self, accession_dir: str, outdir: str, md5s: dict[str, str] | None = None) -> None:
         """
-        Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
+        Moves the downloaded files from the accession directory to the output directory and cleans
+        up the temporary directory.
 
-        Args:
-            accession_dir (str): The directory path containing the downloaded files.
-            outdir (str): The output directory path.
+        :param accession_dir: The directory path containing the downloaded files.
+        :param outdir : The output directory path.
+        :param md5s: The md5s sum attached to each filename
+        :type md5s: dict {filename str: md5 str}
         """
         if md5s is not None:
             # Validate the MD5 hashes
@@ -247,11 +245,8 @@ class ENA:
         """
         Filters the given list of ENA accessions and returns only the valid ones.
 
-        Args:
-            accessions (list): A list of ENA accessions.
-
-        Returns:
-            list: A list of valid ENA accessions.
+        :param accessions: A list of ENA accessions.
+        :returns: A list of valid ENA accessions.
         """
         accessions_by_type = dict()
         for acc in accessions:
@@ -271,7 +266,14 @@ class ENA:
 
         return valid_accessions
 
+
     def valid_accessions_on_API(self, accessions: list[str], query_size: int = 32) -> list[str]:
+        """
+
+        :param accessions: The accessions to test
+        :param query_size: The maximum number of accessions to validate at one time.
+        :returns:
+        """
         valid_accessions = []
         query_begin = 'https://www.ebi.ac.uk/ena/browser/api/xml/'
         query_end = '?download=false&gzip=false&includeLinks=false'
@@ -311,11 +313,8 @@ class ENA:
         """
         Validates a given accession.
 
-        Args:
-            accession (str): The accession to validate.
-
-        Returns:
-            str: The type of accession if it is valid, otherwise None.
+        :param accession: The accession to validate.
+        :returns: The type of accession if it is valid, otherwise the literal 'Invalid'.
         """
         for accession_type, pattern in ENA.accession_patterns.items():
             if re.fullmatch(pattern, accession):
@@ -328,7 +327,8 @@ class ENA:
 
     def get_ena_ftp_url(self, accession: str) -> list[tuple[str, str]]:
         """
-        Returns the ENA FTP URL(s) from an accession number.
+        :param accession: The accession to download
+        :returns: the ENA FTP URL(s) from an accession number.
         """
         # Query the ENA API to get the FTP URL(s) for fastq files
         query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accession}?download=false&gzip=false&includeLinks=false'
