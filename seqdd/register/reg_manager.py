@@ -1,7 +1,7 @@
 import logging
 from os import path, makedirs, remove
 from shutil import rmtree
-
+from typing import Iterable
 import re
 
 from seqdd.register.src_manager import SourceManager
@@ -12,26 +12,17 @@ from seqdd.register.src_manager import SourceManager
 
 class Register:
     """
-    A class representing a register. It is composed of subregisters from different sources (NCBI genomes, SRA, diverse urls).
-
-    Attributes:
-        major_version (int): The major version of the register.
-        minor_version (int): The minor version of the register.
-        subregisters (dict): A dictionary containing the subregisters.
-
-    Methods:
-        __init__(dirpath=None, regfile=None): Initializes a Register object.
-        load_from_dir(dirpath): Loads subregisters from a directory.
-        save_to_dir(dirpath): Saves subregisters to a directory.
-        save_to_file(file): Saves the register to a file.
-        load_from_file(file): Loads the register from a file.
-        __repr__(): Returns a string representation of the Register object.
+    A class representing a register.
+    It is composed of subregisters from different sources (NCBI genomes, SRA, diverse urls).
     """
 
     major_version = 0
+    """The major version of the register."""
     minor_version = 0
+    """minor_version (int): The minor version of the register."""
 
-    def __init__(self, logger: logging.Logger, dirpath: str =None, regfile: str = None) -> None:
+
+    def __init__(self, logger: logging.Logger, dirpath: str = None, regfile: str = None) -> None:
         """
         Initializes a Register object.
 
@@ -49,6 +40,7 @@ class Register:
 
         if regfile is not None:
             self.load_from_file(regfile)
+
 
     def load_from_dir(self, dirpath: str) -> bool:
         """
@@ -71,6 +63,7 @@ class Register:
 
         self.logger.debug(f'Register loaded from {dirpath}')
         return True
+
 
     def save_to_dir(self, dirpath: str) -> bool:
         """
@@ -95,6 +88,7 @@ class Register:
 
         self.logger.debug(f'Register saved to {dirpath}')
         return True
+
 
     def save_to_file(self, file: str) -> None:
         """
@@ -221,7 +215,7 @@ def load_source(sourcepath: str) -> set[str]:
     return accessions
 
 
-def save_source(sourcepath: str, accessions: list[str]) -> None:
+def save_source(sourcepath: str, accessions: Iterable[str]) -> None:
     """
 
     :param sourcepath: The path of this register corresponding a source

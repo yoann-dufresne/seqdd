@@ -1,20 +1,20 @@
 import argparse
 import os
-from sys import stderr
-from tempfile import gettempdir
 import platform
 import re
 import logging
+from sys import stderr
+from tempfile import gettempdir
 
-from seqdd.register.reg_manager import save_source, create_register, Register
-from seqdd.register.src_manager import SourceManager
-from seqdd.utils.download import DownloadManager
+from .register.reg_manager import save_source, create_register, Register
+from .register.src_manager import SourceManager
+from .utils.download import DownloadManager
 
 
 def threads_available() -> int:
     """
 
-    :returns: The maximal number of threads available.
+    :return: The maximal number of threads available.
              It's nice with cluster scheduler or linux.
              On Mac it uses the number of physical cores
     """

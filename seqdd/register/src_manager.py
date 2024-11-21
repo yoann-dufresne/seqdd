@@ -5,9 +5,13 @@ import pkgutil
 from collections.abc import KeysView
 from typing import Type
 
-from sources import Source
+from .sources import Source
 
 class SourceManager:
+    """
+    Class to handle all kind of available source of data
+    """
+
 
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         """
@@ -60,5 +64,4 @@ class SourceManager:
         
         # Charger dynamiquement chaque sous-module et les ajouter à une liste
         loaded_sources = [importlib.import_module(f"{src_module_name}.{submodule}") for submodule in submodules]
-        
         return loaded_sources

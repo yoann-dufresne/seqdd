@@ -5,20 +5,28 @@ from ...utils.scheduler import Job
 
 
 class Source(metaclass=abc.ABCMeta):
+    """
+    Abstract Base Class of data Source
+    """
 
-
-    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
+    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, min_delay: float = 0) -> None:
         """
-        Abstract Base Class of data Source
-
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
         :param bindir: The binary directory path. Where the helper binaries tools are stored.
         :param logger: The logger object.
         """
         self.tmp_dir = tmpdir
+        """The temporary directory path. Where the downloaded intermediate files are located."""
         self.bin_dir = bindir
+        """The binary directory path. Where the helper binaries tools are stored."""
         self.logger = logger
+        """The logger object for logging messages."""
         self.mutex = Lock()
+        """A lock object for thread synchronization."""
+        self.last_query = 0
+        """The timestamp of the last query."""
+        self.min_delay = min_delay
+        """The minimum delay between queries in seconds."""
 
 
     @abc.abstractmethod

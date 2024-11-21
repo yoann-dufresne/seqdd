@@ -3,10 +3,10 @@ from os import listdir, makedirs, path
 import re
 from shutil import rmtree, move
 import subprocess
-from threading import Lock
 import time
 
-from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
+from . import Source
+from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
 naming = {
@@ -16,16 +16,9 @@ naming = {
 }
 
 
-class ENA:
+class ENA(Source):
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
-
-    :param tmpdir: The temporary directory path.
-    :param bindir: The binary directory path.
-    :param logger: The logger object for logging messages.
-    :param mutex: A lock object for thread synchronization.
-    :param min_delay: The minimum delay between ENA queries in seconds.
-    :param last_ena_query: The timestamp of the last ENA query.
     """
 
     # Regular expression for each type of ENA accession
@@ -43,37 +36,33 @@ class ENA:
         """
         Initialize the ENA downloader object.
 
-        :param tmpdir: The temporary directory path.
-        :param bindir: The binary directory path.
+        :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
+        :param bindir: The binary directory path. Where the helper binaries tools are stored.
         :param logger: The logger object.
         """
-        self.tmpdir = tmpdir
-        self.bindir = bindir
-        self.logger = logger
-        
-        self.mutex = Lock()
-        self.min_delay = 0.35
-        self.last_ena_query = 0
+        super().__init__(tmpdir, bindir, logger, min_delay=0.35)
+
 
     def is_ready(self) -> bool:
         """
         No binaries, always ready.
         """
         return True
-    
-    def ena_delay_ready(self) -> bool :
+
+
+    def src_delay_ready(self) -> bool :
         """
         Checks if the minimum delay between ENA queries has passed.
 
-        :returns: bool True if the minimum delay has passed, False otherwise.
+        :returns: True if the minimum delay has passed, False otherwise.
         """
         # Minimal delay between SRA queries (0.5s)
         locked = self.mutex.acquire(blocking=False)
         ready = False
         if locked:
-            ready = time.time() - self.last_ena_query > self.min_delay
+            ready = time.time() - self.last_query > self.min_delay
             if ready:
-                self.last_ena_query = time.time()
+                self.last_query = time.time()
             self.mutex.release()
         return ready
     
@@ -86,7 +75,7 @@ class ENA:
             The function acquires the mutex lock. You must release it after using this function.
 
         """
-        while not self.ena_delay_ready():
+        while not self.src_delay_ready():
             time.sleep(0.01)
         self.mutex.acquire()
 
@@ -98,7 +87,7 @@ class ENA:
         Generates a list of jobs for downloading and processing ENA datasets.
 
         :param accessions: A list of ENA accessions.
-        :param datadir: The output directory path.
+        :param datadir: The output directory path. Where the expected files will be located.
         :returns: A list of jobs for downloading and processing ENA datasets.
         """
         jobs = []
@@ -116,7 +105,7 @@ class ENA:
 
             job_name = f'ena_{acc}'
             # Create a temporary directory for the accession
-            tmp_dir = path.join(self.tmpdir, acc)
+            tmp_dir = path.join(self.tmp_dir, acc)
             if path.exists(tmp_dir):
                 rmtree(tmp_dir)
             makedirs(tmp_dir)
@@ -143,7 +132,7 @@ class ENA:
                 # Create the command line job
                 curl_jobs.append(CmdLineJob(
                     command_line=f'curl -s -o {output_file} "{url}"',
-                    can_start = self.ena_delay_ready,
+                    can_start = self.src_delay_ready,
                     name=f'{job_name}_{filename}'
                 ))
             jobs.extend(curl_jobs)
@@ -153,24 +142,22 @@ class ENA:
                 func_to_run = self.move_and_clean,
                 func_args = (tmp_dir, datadir, md5s),
                 parents = curl_jobs,
-                can_start = self.ena_delay_ready,
+                can_start = self.src_delay_ready,
                 name=f'{job_name}_move'
             ))
 
         return jobs
     
     def jobs_from_assembly(self, assembly: str, tmpdir: str, outdir: str, job_name: str) \
-            -> list[CmdLineJob, CmdLineJob, FunctionJob]:
+            -> list[Job]:
         """
         Creates a list of jobs for downloading and processing an assembly.
 
         :param assembly: The assembly accession.
-        :param tmpdir: The temporary directory path.
-        :param outdir: The output directory path.
+        :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
+        :param outdir: The output directory path. Where the expected files will be located.
         :param job_name: The name of the job.
-
-        Returns:
-            list: A list of jobs for downloading and processing an assembly.
+        :return: A list of jobs for downloading and processing an assembly.
         """
         # Get the assembly URL
         url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{assembly}'
@@ -180,14 +167,14 @@ class ENA:
         # Create the command line job
         curl_job = CmdLineJob(
             command_line=f'curl -o {output_file} "{url}"',
-            can_start=self.ena_delay_ready,
+            can_start=self.src_delay_ready,
             name=f'{job_name}_{assembly}_download'
         )
         # Create a compression job
         gzip_job = CmdLineJob(
             command_line=f'gzip {output_file}',
             parents=[curl_job],
-            can_start=self.ena_delay_ready,
+            can_start=self.src_delay_ready,
             name=f'{job_name}_{assembly}_gzip'
         )
 
@@ -196,7 +183,7 @@ class ENA:
             func_to_run=self.move_and_clean,
             func_args=(tmpdir, outdir),
             parents=[gzip_job],
-            can_start=self.ena_delay_ready,
+            can_start=self.src_delay_ready,
             name=f'{job_name}_{assembly}_move'
         )
 
@@ -209,7 +196,7 @@ class ENA:
         up the temporary directory.
 
         :param accession_dir: The directory path containing the downloaded files.
-        :param outdir : The output directory path.
+        :param outdir: The output directory path. Where the expected files will be located.
         :param md5s: The md5s sum attached to each filename
         :type md5s: dict {filename str: md5 str}
         """
@@ -272,7 +259,7 @@ class ENA:
 
         :param accessions: The accessions to test
         :param query_size: The maximum number of accessions to validate at one time.
-        :returns:
+        :returns: list of accession that can be downloaded from ENA (after querying ENA for their presence)
         """
         valid_accessions = []
         query_begin = 'https://www.ebi.ac.uk/ena/browser/api/xml/'
@@ -289,7 +276,7 @@ class ENA:
                 self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
                 continue
             # Update the last query time
-            self.last_ena_query = time.time()
+            self.last_query = time.time()
             self.mutex.release()
 
             # Parse the response
@@ -335,7 +322,7 @@ class ENA:
         self.wait_my_turn()
         response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # Update the last query time
-        self.last_ena_query = time.time()
+        self.last_query = time.time()
         self.mutex.release()
         # Check if the query was successful
         if response.returncode != 0:
@@ -356,7 +343,7 @@ class ENA:
         response = subprocess.run(['curl', submitted_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # Update the last query time
-        self.last_ena_query = time.time()
+        self.last_query = time.time()
         self.mutex.release()
         # Check if the query was successful
         if response.returncode != 0:
