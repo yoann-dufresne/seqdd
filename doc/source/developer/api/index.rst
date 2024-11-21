@@ -13,6 +13,7 @@ SeqDD API documentation
 
     register/reg_manager
     register/src_manager
+    register/sources/sources
     register/sources/ena
     register/sources/ncbi
     register/sources/sra
