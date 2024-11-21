@@ -1,7 +1,7 @@
 import logging
 from os import path, makedirs, remove
 from shutil import rmtree
-
+from typing import Iterable
 import re
 
 from seqdd.register.src_manager import SourceManager
@@ -12,34 +12,23 @@ from seqdd.register.src_manager import SourceManager
 
 class Register:
     """
-    A class representing a register. It is composed of subregisters from different sources (NCBI genomes, SRA, diverse urls).
-
-    Attributes:
-        major_version (int): The major version of the register.
-        minor_version (int): The minor version of the register.
-        subregisters (dict): A dictionary containing the subregisters.
-
-    Methods:
-        __init__(dirpath=None, regfile=None): Initializes a Register object.
-        load_from_dir(dirpath): Loads subregisters from a directory.
-        save_to_dir(dirpath): Saves subregisters to a directory.
-        save_to_file(file): Saves the register to a file.
-        load_from_file(file): Loads the register from a file.
-        __repr__(): Returns a string representation of the Register object.
+    A class representing a register.
+    It is composed of subregisters from different sources (NCBI genomes, SRA, diverse urls).
     """
 
     major_version = 0
+    """The major version of the register."""
     minor_version = 0
+    """minor_version (int): The minor version of the register."""
 
-    def __init__(self, logger: logging.Logger, dirpath: str =None, regfile: str = None) -> None:
+
+    def __init__(self, logger: logging.Logger, dirpath: str = None, regfile: str = None) -> None:
         """
         Initializes a Register object.
 
-        Args:
-            logger: The logger object.
-            src_manipulatators (dict): A dictionary containing the source manipulators.
-            dirpath (str, optional): The directory path to load subregisters from. Defaults to None.
-            regfile (str, optional): The file path to load the register from. Defaults to None.
+        :param logger: The logger object.
+        :param dirpath: The directory path to load subregisters from.
+        :param regfile: he file path to load the register from.
         """
         self.logger = logger
 
@@ -52,15 +41,13 @@ class Register:
         if regfile is not None:
             self.load_from_file(regfile)
 
+
     def load_from_dir(self, dirpath: str) -> bool:
         """
         Loads subregisters from a directory.
 
-        Args:
-            dirpath (str): The directory path to load subregisters from.
-
-        Returns:
-            bool: True if successful, False otherwise.
+        :param dirpath: The directory path to load subregisters from.
+        :return: True if successful, False otherwise.
         """
         if not path.isdir(dirpath):
             self.logger.warning(f"Register {dirpath} does not exist.")
@@ -77,15 +64,13 @@ class Register:
         self.logger.debug(f'Register loaded from {dirpath}')
         return True
 
+
     def save_to_dir(self, dirpath: str) -> bool:
         """
         Saves subregisters to a directory.
 
-        Args:
-            dirpath (str): The directory path to save subregisters to.
-
-        Returns:
-            bool: True if successful, False otherwise.
+        :param dirpath: The directory path to save subregisters to.
+        :return: True if successful, False otherwise.
         """
         if not path.isdir(dirpath):
             self.logger.error(f"Register {dirpath} does not exist. Save aborted...")
@@ -104,12 +89,13 @@ class Register:
         self.logger.debug(f'Register saved to {dirpath}')
         return True
 
+
     def save_to_file(self, file: str) -> None:
         """
         Saves the register to a file.
 
-        Args:
-            file (str): The file path to save the register to.
+        :param file:
+        :return: The file path to save the register to.
         """
         with open(file, 'w') as fw:
             print(f'version {Register.major_version}.{Register.minor_version}', file=fw)
@@ -127,8 +113,7 @@ class Register:
         """
         Loads the register from a file.
 
-        Args:
-            file (str): The file path to load the register from.
+        :param file: The file path to load the register from.
         """
         with open(file) as fr:
             # Version check
@@ -171,9 +156,8 @@ class Register:
         """
         Removes an accession from a source.
 
-        Args:
-            source (str): The source to remove the accession from.
-            accession (str): The accession to remove.
+        :param source: The source to remove the accession from.
+        :param accession: The accession to remove.
         """
         if source not in self.acc_by_src:
             self.logger.error(f"Source {source} not found in the register.")
@@ -187,14 +171,12 @@ class Register:
 
 
     def filter_accessions(self, source: str, regexps: list[str]) -> list[str]:
-        """ Returns the accessions from a given source that match at least one of the regexps.
+        """
+        Returns the accessions from a given source that match at least one of the regexps.
 
-        Args:
-            source (str): The source to filter.
-            regexps (list): A list of regular expressions.
-
-        Returns:
-            list: A list of accessions from the source that match at least one of the regexps.
+        :param source: The source to filter.
+        :param regexps: A list of regular expressions.
+        :return:  A list of accessions from the source that match at least one of the regexps.
         """
         if source not in self.acc_by_src:
             self.logger.error(f"Source {source} not found in the register.")
@@ -205,10 +187,8 @@ class Register:
 
     def __repr__(self) -> str:
         """
-        Returns a string representation of the Register object.
 
-        Returns:
-            str: A string representation of the Register object.
+        :return: A string representation of the Register object.
         """
         return '\n'.join(f'{sub} : [{", ".join(self.acc_by_src[sub])}]' for sub in self.acc_by_src)
 
@@ -216,6 +196,11 @@ class Register:
 # --- Register files load/save ---
 
 def load_source(sourcepath: str) -> set[str]:
+    """
+
+    :param sourcepath: The path of this register corresponding a source
+    :return: set of accession describe in the sourcepath
+    """
     # Empty file
     if not path.isfile(sourcepath):
         return set()
@@ -225,19 +210,30 @@ def load_source(sourcepath: str) -> set[str]:
     with open(sourcepath) as fr:
         for line in fr:
             acc = line.strip()
-            if len(acc) > 0:
+            if acc:
                 accessions.add(acc)
-
     return accessions
 
 
-def save_source(sourcepath: str, accessions: list[str]) -> None:
+def save_source(sourcepath: str, accessions: Iterable[str]) -> None:
+    """
+
+    :param sourcepath: The path of this register corresponding a source
+    :param accessions: The list of accessions to write in sourcepath
+    """
     with open(sourcepath, 'w') as fw:
         for acc in accessions:
             print(acc, file=fw)
 
 
 def create_register(dirpath: str, logger: logging.Logger, force: bool = False) -> Register:
+    """
+
+    :param dirpath: The path directory where to save The register
+    :param logger: The logger object for logging messages.
+    :param force: force register reconstruction
+    :return:
+    """
     # Remove files if force reconstruction
     if force and path.exists(dirpath):
         rmtree(dirpath)
