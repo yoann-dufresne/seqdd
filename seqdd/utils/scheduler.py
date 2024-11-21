@@ -330,9 +330,10 @@ class CmdLineJob(Job):
                  name: str = None,
                  log_file: str = None) -> None:
         """
+
         :param command_line: A command line to run in a bash subprocess.
-        :param parents : A list of parent jobs to wait before running this one.
-        :param can_start : A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+        :param parents: A list of parent jobs to wait before running this one.
+        :param can_start: The function must return True when the job is allowed to start
         """
         name = name if name is not None else f'CmdLineJob_{Job.ID}'
         log_file = log_file if log_file is not None else f'{name}.log'
