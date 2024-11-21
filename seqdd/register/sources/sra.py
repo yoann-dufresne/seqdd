@@ -1,13 +1,13 @@
 import logging
-from os import listdir, makedirs, path, remove
 import platform
-from shutil import rmtree, move
 import subprocess
-from threading import Lock
 import time
+from os import listdir, makedirs, path, remove
+from shutil import rmtree, move
 
-from seqdd.utils.download import check_binary
-from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
+from . import Source
+from ...utils.download import check_binary
+from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
 naming = {
@@ -17,76 +17,60 @@ naming = {
 }
 
 
-class SRA:
+class SRA(Source):
     """
     The SRA class represents a data downloader for the Sequence Read Archive (SRA) database.
-
-    Attributes:
-        tmpdir (str): The temporary directory path.
-        bindir (str): The binary directory path.
-        logger: The logger object for logging messages.
-        binaries (dict): A dictionary containing the paths to the SRA toolkit binaries.
-        mutex: A lock object for thread synchronization.
-        min_delay (float): The minimum delay between SRA queries in seconds.
-        last_sra_query (float): The timestamp of the last SRA query.
-
     """
-    
+
+
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         """
         Initialize the SRA downloader object.
 
-        Args:
-            tmpdir (str): The temporary directory path.
-            bindir (str): The binary directory path.
-            logger: The logger object.
+        :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
+        :param bindir: The binary directory path. Where the helper binaries tools are stored.
+        :param logger: The logger object.
         """
-        self.tmpdir = tmpdir
-        self.bindir = bindir
-        self.logger = logger
+        super().__init__(tmpdir, bindir, logger, min_delay=0.5)
+
         self.binaries = self.download_sra_toolkit()
-        
-        self.mutex = Lock()
-        self.min_delay = 0.5
-        self.last_sra_query = 0
+        """A dictionary containing the paths to the SRA toolkit binaries."""
+
 
     def is_ready(self) -> bool:
         """
         Checks if the SRA toolkit binaries are ready for use.
 
-        Returns:
-            bool: True if the binaries are ready, False otherwise.
+        :return: True if the binaries are ready, False otherwise.
         """
         return self.binaries is not None
-    
-    def sra_delay_ready(self) -> bool:
+
+
+    def src_delay_ready(self) -> bool:
         """
         Checks if the minimum delay between SRA queries has passed.
 
-        Returns:
-            bool: True if the minimum delay has passed, False otherwise.
+        :return: True if the minimum delay has passed, False otherwise.
         """
         # Minimal delay between SRA queries (0.5s)
         locked = self.mutex.acquire(blocking=False)
         ready = False
         if locked:
-            ready = time.time() - self.last_sra_query > self.min_delay
+            ready = time.time() - self.last_query > self.min_delay
             if ready:
                 self.last_sra_query = time.time()
             self.mutex.release()
         return ready
-    
+
+
     def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of SRA accessions and returns only the valid ones.
 
-        Args:
-            accessions (list): A list of SRA accessions.
-
-        Returns:
-            list: A list of valid SRA accessions.
+        :param accessions: A list of SRA accessions.
+        :return: A list of valid SRA accessions.
         """
-        # print('TODO: Validate sra accessions...')
+        # TODO: Validate sra accessions
         return accessions
 
     
@@ -94,12 +78,9 @@ class SRA:
         """
         Generates a list of jobs for downloading and processing SRA datasets.
 
-        Args:
-            accessions (list): A list of SRA accessions.
-            datadir (str): The output directory path.
-
-        Returns:
-            list: A list of jobs for downloading and processing SRA datasets.
+        :param accessions: A list of SRA accessions.
+        :param datadir: The output directory path.
+        :return: A list of jobs for downloading and processing SRA datasets.
         """
         jobs = []
 
@@ -114,7 +95,7 @@ class SRA:
             job_name = f'sra_{acc}'
             
             # Create a tmp directory for the accession. Remove the previous one if it exists
-            acc_dir = path.join(self.tmpdir, acc)
+            acc_dir = path.join(self.tmp_dir, acc)
             if path.exists(acc_dir):
                 rmtree(acc_dir)
             makedirs(acc_dir)
@@ -125,21 +106,21 @@ class SRA:
             fasterq_dump_jobs = []
             if acc.startswith('SRR'):
                 # Prefetch data
-                cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {self.tmpdir} {acc}'
-                prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
+                cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {self.tmp_dir} {acc}'
+                prefetch_job = CmdLineJob(cmd, can_start=self.src_delay_ready, name=f'{job_name}_prefetch')
                 # Download SRR accession
                 fasterq_dump_jobs = self.jobs_from_SRR(acc_dir, job_name)
             elif acc.startswith('SRX') or acc.startswith('SRP'):
                 # Prefetch data
                 cmd = f'{self.binaries["prefetch"]} --max-size u --output-directory {acc_dir} {acc}'
-                prefetch_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_prefetch')
+                prefetch_job = CmdLineJob(cmd, can_start=self.src_delay_ready, name=f'{job_name}_prefetch')
                 fasterq_dump_jobs = self.jobs_from_SRXP(acc_dir, job_name)
 
             # define parents
             for job in fasterq_dump_jobs:
                 job.parents.append(prefetch_job)
 
-            # Move to datadir and clean tmpdir
+            # Move to datadir and clean tmp_dir
             clean_job = FunctionJob(self.move_and_clean,
                                     func_args=(acc_dir, datadir),
                                     parents=fasterq_dump_jobs,
@@ -157,9 +138,8 @@ class SRA:
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
-        Args:
-            accession_dir (str): The directory path containing the downloaded files.
-            outdir (str): The output directory path.
+        :param accession_dir: The directory path containing the downloaded files.
+        :param outdir: The output directory path.
         """
         # Get the accession name
         accession = path.basename(accession_dir)
@@ -179,10 +159,16 @@ class SRA:
 
     # ---- SRA specific jobs ----
 
-    def jobs_from_SRR(self, accession_dir: str, job_name: str) -> list[CmdLineJob, CmdLineJob]:
+    def jobs_from_SRR(self, accession_dir: str, job_name: str) -> list[Job]:
+        """
+
+        :param accession_dir:
+        :param job_name:
+        :return:
+        """
         # Split files
         cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {accession_dir} {accession_dir}'
-        fasterqdump_job = CmdLineJob(cmd, can_start=self.sra_delay_ready, name=f'{job_name}_fasterqdump')
+        fasterqdump_job = CmdLineJob(cmd, can_start=self.src_delay_ready, name=f'{job_name}_fasterqdump')
         
         # Compress files
         cmd = f'gzip {path.join(accession_dir, "*.fastq")}'
@@ -191,7 +177,13 @@ class SRA:
         return [fasterqdump_job, compress_job]
     
 
-    def jobs_from_SRXP(self, acc_dir, job_name):
+    def jobs_from_SRXP(self, acc_dir: str, job_name: str) -> list[Job]:
+        """
+
+        :param acc_dir:
+        :param job_name:
+        :return:
+        """
         SRXP_subjob = FunctionJob(
             self.run_fasterqdump_from_SRXP,
             func_args=(acc_dir,),
@@ -202,6 +194,10 @@ class SRA:
     
 
     def run_fasterqdump_from_SRXP(self, SRXP_directory: str) -> None:
+        """
+
+        :param SRXP_directory:
+        """
         # TODO: Move log files to the log directory. Can be done after yielding.
         SRX_name = path.basename(SRXP_directory)
 
@@ -212,7 +208,7 @@ class SRA:
                 continue
             
             res = None
-            log_file = path.join(self.tmpdir, f'{SRX_name}_{subdirectory_name}_fasterq-dump.log')
+            log_file = path.join(self.tmp_dir, f'{SRX_name}_{subdirectory_name}_fasterq-dump.log')
             
             # Split the sra files into fastq files
             cmd = f'{self.binaries["fasterq-dump"]} --split-3 --skip-technical --outdir {subdirectory} {subdirectory}'
@@ -223,7 +219,7 @@ class SRA:
                 raise Exception(f'Error while running fasterq-dump on {subdirectory}')
             
             res = None
-            log_file = path.join(self.tmpdir, f'{SRX_name}_{subdirectory_name}_gzip.log')
+            log_file = path.join(self.tmp_dir, f'{SRX_name}_{subdirectory_name}_gzip.log')
             fp = open(log_file, 'w')
             fp.close()
 
@@ -253,8 +249,7 @@ class SRA:
         """
         Downloads and installs the SRA toolkit if necessary, and returns the paths to the SRA toolkit binaries.
 
-        Returns:
-            dict: A dictionary containing the paths to the SRA toolkit binaries.
+        :return: A dictionary containing the paths to the SRA toolkit binaries.
         """
         # Check if the system has the ncbi datasets cli
         prefetch_installed = check_binary('prefetch')
@@ -266,8 +261,8 @@ class SRA:
             }
         
         # Check if the software is locally installed
-        prefetch_local_bin = path.abspath(path.join(self.bindir, 'prefetch'))
-        fasterqdump_local_bin = path.abspath(path.join(self.bindir, 'fasterq-dump'))
+        prefetch_local_bin = path.abspath(path.join(self.bin_dir, 'prefetch'))
+        fasterqdump_local_bin = path.abspath(path.join(self.bin_dir, 'fasterq-dump'))
         prefetch_installed = check_binary(prefetch_local_bin)
         fasterqdump_installed = check_binary(fasterqdump_local_bin)
         
@@ -280,15 +275,13 @@ class SRA:
         # Install the software
         return self.install_sratoolkit()
 
+
     def install_sratoolkit(self, version='3.1.1') -> dict[str, str]|None:
         """
         Downloads and installs the SRA toolkit with the specified version.
 
-        Args:
-            version (str): The version of the SRA toolkit to install. Default is '3.1.1'.
-
-        Returns:
-            dict: A dictionary containing the paths to the SRA toolkit binaries, or None if installation failed.
+        :param version: The version of the SRA toolkit to install. Default is '3.1.1'.
+        :return: A dictionary containing the paths to the SRA toolkit binaries, or None if installation failed.
         """
         download_link = ''
         dirname = ''
@@ -305,11 +298,15 @@ class SRA:
 
         # Message to potential system extensions
         if not supported:
-            self.logger.critical(f'sratoolkit auto-install is not yet supported on your system. SRA downloader has not been installed... Also maybe we can include your system in the auto-installer. Please submit an issue on github with the following values:\nsystem={system}\tplateform={platform.machine()}')
+            self.logger.critical(f'sratoolkit auto-install is not yet supported on your system. '
+                                 f'SRA downloader has not been installed... '
+                                 f'Also maybe we can include your system in the auto-installer. '
+                                 f'Please submit an issue on github with the following values:'
+                                 f'\nsystem={system}\tplateform={platform.machine()}')
             return None
 
         # Download sra toolkit
-        tmp_dir = path.abspath(self.tmpdir)
+        tmp_dir = path.abspath(self.tmp_dir)
         makedirs(tmp_dir, exist_ok=True)
         tarpath = path.join(tmp_dir, tarname)
 
@@ -323,7 +320,7 @@ class SRA:
             return None
 
         # Uncompress the archive
-        cmd = f'tar -xzf {tarpath} -C {self.bindir}'
+        cmd = f'tar -xzf {tarpath} -C {self.bin_dir}'
         ret = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         remove(tarpath)
 
@@ -332,23 +329,23 @@ class SRA:
             return None
 
         # Create links to the bins
-        prefetch_bin = path.abspath(path.join(self.bindir, dirname, 'bin', 'prefetch'))
-        prefetch_ln = path.abspath(path.join(self.bindir, 'prefetch'))
+        prefetch_bin = path.abspath(path.join(self.bin_dir, dirname, 'bin', 'prefetch'))
+        prefetch_ln = path.abspath(path.join(self.bin_dir, 'prefetch'))
         cmd = f'ln -s {prefetch_bin} {prefetch_ln}'
         ret = subprocess.run(cmd.split())
         if ret.returncode != 0:
             self.logger.error(f'Impossible to create symbolic link {prefetch_ln}. SRA downloader has not been installed...')
             return None
 
-        fasterqdump_bin = path.abspath(path.join(self.bindir, dirname, 'bin', 'fasterq-dump'))
-        fasterqdump_ln = path.abspath(path.join(self.bindir, 'fasterq-dump'))
+        fasterqdump_bin = path.abspath(path.join(self.bin_dir, dirname, 'bin', 'fasterq-dump'))
+        fasterqdump_ln = path.abspath(path.join(self.bin_dir, 'fasterq-dump'))
         cmd = f'ln -s {fasterqdump_bin} {fasterqdump_ln}'
         ret = subprocess.run(cmd.split())
         if ret.returncode != 0:
             self.logger.error(f'Impossible to create symbolic link {fasterqdump_ln}. SRA downloader has not been installed...')
             return None
         
-        self.logger.info(f'SRA downloader binaries installed at {self.bindir}')
+        self.logger.info(f'SRA downloader binaries installed at {self.bin_dir}')
 
         return {
             'prefetch' : prefetch_ln,
@@ -359,4 +356,3 @@ class SRA:
 # --- Cmds ---
 # ./sratoolkit.3.1.1-ubuntu64/bin/prefetch --max-size u --output-directory outtest SRR000001
 # ./sratoolkit.3.1.1-ubuntu64/bin/fasterq-dump --split-3 --skip-technical --outdir outtest outtest/SRR000001
-
