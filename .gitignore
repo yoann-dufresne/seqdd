@@ -1,6 +1,45 @@
-**/__pycache__
 data/
 logs/
-tmp/
+tmp
+
+##################################
+# seqdd generated files and dirs #
+##################################
 .register/
 **/*.reg
+
+
+#############
+# vim files #
+#############
+*\.swp
+*~
+\#*\#
+
+##########################
+# Python complied source #
+##########################
+*\.pyc
+*\.pyo
+**/__pycache__
+build/
+dist/
+doc/_build/
+seq.egg-info/
+
+
+#################
+# pycharm files #
+#################
+\.idea
+
+######################
+# Logs and databases #
+######################
+*\.log
+.DS_Store
+
+########
+# ruff #
+########
+.ruff_cache/
