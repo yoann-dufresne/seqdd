@@ -33,7 +33,6 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     :param logger: The object to log message
     :returns: the command line argument and options parsed
     """
-    max_threads_available = threads_available()
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
@@ -84,7 +83,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                           default='data', help='Directory where all the data will be downloaded')
     download.add_argument('-p', '--max-processes',
                           type=int,
-                          default=max_threads_available // 2,
+                          default=threads_available() // 2,
                           help='Number of processes to run in parallel.')
     download.add_argument('-t', '--tmp-directory',
                           default='/tmp/seqdd',
@@ -136,10 +135,6 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
 
     args = parser.parse_args()
 
-    if args.max_processes > max_threads_available:
-        args.max_processes = max_threads_available
-        logger.warning(f"The maximal number of threads available is {max_threads_available} "
-                       f"set '--max-processes {max_threads_available}'.")
     return args
 
 
@@ -258,6 +253,11 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
     :param args: The parsed cmd line arguments
     :param logger: The object to log
     """
+    max_threads_available = threads_available()
+    if args.max_processes > max_threads_available:
+        args.max_processes = max_threads_available
+        logger.warning(f"The maximal number of threads available is {max_threads_available} "
+                       f"set '--max-processes {max_threads_available}'.")
     bindir = os.path.join(args.register_location, 'bin')
     src_manager = SourceManager(args.tmp_directory, bindir, logger)
     reg = Register(logger, dirpath=args.register_location)
