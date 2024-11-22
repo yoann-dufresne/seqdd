@@ -17,5 +17,6 @@ Developer Guide
    :maxdepth: 2
 
    installation
+   testing
    overview
    api/index
