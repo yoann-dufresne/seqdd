@@ -162,7 +162,7 @@ class NCBI(Source):
 
     @staticmethod
     def is_valid_acc_format(acc: str) -> bool:
-        """
+        r"""
         Check if the given accession number is in a valid format.
         An accession number is considered valid if it:
         - Starts with 'GCA\_' or 'GCF\_'
