@@ -50,7 +50,7 @@ class TestSource(SeqddTest):
         self.assertFalse(ena.src_delay_ready())
 
 
-    def test_wait_may_turn(self):
+    def test_wait_my_turn(self):
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
         self.assertFalse(ena.mutex.locked())
         ena.wait_my_turn()
