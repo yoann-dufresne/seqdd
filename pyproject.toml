@@ -20,6 +20,7 @@ classifiers = [
     "Environment :: Console",
     "Development Status :: 3 - Alpha"
 ]
+
 [project.optional-dependencies]
 dev = [
     'sphinx',
@@ -36,6 +37,11 @@ Issues = "https://github.com/yoann-dufresne/seqdd/issues"
 [project.scripts]
 seqdd = "seqdd.__main__:main"
 
+
+[tool.coverage.run]
+branch = true
+include = ["seqdd/*"]
+command_line = "-m unittest discover -vv -s tests/"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
