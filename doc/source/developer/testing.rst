@@ -100,11 +100,55 @@ The package is automatically installed if you have installed `seqdd` with the `d
 The coverage package is setup in the `pyproject.toml` configuration file
 
 To compute the coverage
+
 .. code-block:: shell
 
     coverage run
 
 then display a report
+
+.. code-block:: shell
+
+    coverage report
+
+.. code-block:: text
+    Name                                 Stmts   Miss Branch BrPart  Cover
+    ----------------------------------------------------------------------
+    seqdd/__init__.py                        0      0      0      0   100%
+    seqdd/errors.py                          4      0      0      0   100%
+    seqdd/register/__init__.py               0      0      0      0   100%
+    seqdd/register/sources/__init__.py      27      3      0      0    89%
+    seqdd/register/sources/ena.py          162     91     60      5    40%
+    seqdd/utils/__init__.py                  0      0      0      0   100%
+    seqdd/utils/scheduler.py               202    131     66      0    26%
+    ----------------------------------------------------------------------
+    TOTAL                                  395    225    126      5    36%
+
+
+If you want to force computation for python files in seqdd
+
+.. code-block:: shell
+
+    coverage run --source=seqdd
+
+    ... inorout.py:461: CoverageWarning: --include is ignored because --source is set (include-ignored)
+    self.warn("--include is ignored because --source is set", slug="include-ignored")
+    test_ena (test_ena.TestEna.test_ena) ... ok
+    test_is_ready (test_ena.TestEna.test_is_ready) ... ok
+    test_jobs_from_accessions (test_ena.TestEna.test_jobs_from_accessions) ... ok
+    test_move_and_clean_w_bad_md5 (test_ena.TestEna.test_move_and_clean_w_bad_md5) ... ok
+    test_move_and_clean_w_good_md5 (test_ena.TestEna.test_move_and_clean_w_good_md5) ... ok
+    test_move_and_clean_wo_md5 (test_ena.TestEna.test_move_and_clean_wo_md5) ... ok
+    test_src_delay_ready (test_ena.TestEna.test_src_delay_ready) ... ok
+    test_wait_my_turn (test_ena.TestEna.test_wait_my_turn) ... ok
+
+    ----------------------------------------------------------------------
+    Ran 8 tests in 0.010s
+
+    OK
+
+then
+
 .. code-block:: shell
 
     coverage report
