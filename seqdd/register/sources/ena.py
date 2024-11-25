@@ -7,6 +7,7 @@ import time
 
 from . import Source
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
+from ...errors import DownloadError
 
 
 naming = {
@@ -209,10 +210,11 @@ class ENA(Source):
                 md5_hash = md5_check.stdout.decode().split()[0]
                 # Check if the MD5 hash is correct
                 if md5 != md5_hash:
-                    self.logger.error(f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\n'
-                                      f'Accession files will not be downloaded.')
+                    msg = (f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\n'
+                            'Accession files will not be downloaded.')
+                    self.logger.error(msg)
                     rmtree(accession_dir)
-                    return
+                    raise DownloadError(msg)
 
         # Create the accession directory in the output directory
         outdir = path.join(outdir, path.basename(accession_dir))
