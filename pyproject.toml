@@ -41,7 +41,7 @@ seqdd = "seqdd.__main__:main"
 [tool.coverage.run]
 branch = true
 include = ["seqdd/*"]
-command_line = "-m unittest discover -vv -s tests/"
+command_line = "-m unittest discover -vv -s tests"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
