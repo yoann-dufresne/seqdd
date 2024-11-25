@@ -9,7 +9,7 @@ from seqdd.register.sources.ena import ENA
 from seqdd.utils.scheduler import CmdLineJob, FunctionJob
 
 
-class TestSource(SeqddTest):
+class TestEna(SeqddTest):
 
 
     @classmethod
