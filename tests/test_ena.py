@@ -1,5 +1,4 @@
 import logging
-import shutil
 import tempfile
 import os
 import time
@@ -86,7 +85,7 @@ class TestEna(SeqddTest):
         os.mkdir(acc_dir)
         os.mkdir(out_dir)
         genome_path = self.find_data('Genomes', 'AF268967.fa')
-        arc_path = self.copy_file(genome_path, acc_dir, zip=True)
+        self.copy_file(genome_path, acc_dir, zip=True)
         ena.move_and_clean(acc_dir, out_dir)
         dest = os.path.join(out_dir, 'acc_dir', os.path.basename(genome_path)) +'.zip'
         self.assertTrue(os.path.exists(dest))
@@ -107,9 +106,12 @@ class TestEna(SeqddTest):
             with self.assertRaises(DownloadError) as ctx:
                 ena.move_and_clean(acc_dir, out_dir, md5s=md5)
             log_msg = log.get_value().rstrip()
-        self.assertEqual(log_msg,
-                         f'MD5 hash mismatch for file {os.path.basename(arc_path)} in accession {acc_dir}.\n'
-                         'Accession files will not be downloaded.')
+
+            exp_msg = (f'MD5 hash mismatch for file {os.path.basename(arc_path)} in accession {acc_dir}.\n'
+                       f'Accession files will not be downloaded.')
+            self.assertEqual(log_msg,
+                             exp_msg)
+        self.assertEqual(str(ctx.exception), exp_msg)
 
 
     def test_move_and_clean_w_good_md5(self):
