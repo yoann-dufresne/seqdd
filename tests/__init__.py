@@ -1,7 +1,9 @@
 import os
+import shutil
 import sys
 import unittest
 import hashlib
+import zipfile
 from functools import partial
 import json
 import re
@@ -115,6 +117,22 @@ class SeqddTest(unittest.TestCase):
         self.assertListEqual(j1, j2)
 
 
+    def copy_file(self, src, dest, zip: bool = False):
+        src_path = self.find_data(src)
+        if not os.path.exists(dest):
+            os.makedirs(dest)
+            dest = os.path.join(dest, os.path.basename(src_path))
+        elif os.path.isdir(dest):
+            dest = os.path.join(dest, os.path.basename(src_path))
+        shutil.copyfile(src, dest)
+        if zip:
+            src = dest
+            dest = f'{dest}.zip'
+            with zipfile.ZipFile(dest, mode='w') as my_zip:
+                my_zip.write(src)
+            os.unlink(src)
+        return dest
+
 
     @staticmethod
     def md5sum(file_=None, str_=None):
@@ -128,7 +146,6 @@ class SeqddTest(unittest.TestCase):
         assert not (file_ and str_)
 
         d = hashlib.md5()
-
         if file_:
             with open(file_, mode='rb') as f:
                 for buf in iter(partial(f.read, 128), b''):
