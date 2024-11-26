@@ -112,6 +112,7 @@ then display a report
     coverage report
 
 .. code-block:: text
+
     Name                                 Stmts   Miss Branch BrPart  Cover
     ----------------------------------------------------------------------
     seqdd/__init__.py                        0      0      0      0   100%
