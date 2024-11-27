@@ -6,9 +6,15 @@
 SeqDD documentation
 ===================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+
+SeqDD is a tools to ease the way to download genomes from different sources.
+The main goals are:
+
+- to ease the life of bioinformatician
+- and improve reproducibility
+
+Reproducibility is crucial, let's try to improve it!
+
 
 ==========
 User Guide
