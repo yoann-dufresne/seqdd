@@ -1,7 +1,7 @@
 # SeqDD - The Sequence Data Downloader
 
-A software to prepare a dataset environement from a set of accession number.
-The goal is to make data environement more portable to allow better reproducibility.
+A software to prepare a dataset environment from a set of accession number.
+The goal is to make data environment more portable to allow better reproducibility.
 
 # Install the tool
 
@@ -48,7 +48,8 @@ All the register files are downloaded into the data directory
 
 # Tools description
 
-All the tools are applied to a register. Without specification, the .register directory is used as a register. To specify a register directory, use the `--register-location` option before your command.
+All the tools are applied to a register. Without specification, the .register directory is used as a register.
+To specify a register directory, use the `--register-location` option before your command.
 
 General command line:
 ```
