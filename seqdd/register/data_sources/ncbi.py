@@ -1,17 +1,15 @@
 import logging
-import threading
-from collections.abc import Iterable
-from os import listdir, makedirs, path
 import platform
-from shutil import rmtree, move
-import subprocess
-from sys import stderr
-from threading import Lock
 import time
-
-from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
-from seqdd.utils.download import check_binary
 import json
+import subprocess
+import threading
+from os import listdir, makedirs, path
+from shutil import rmtree, move
+
+from . import Source
+from ...utils.scheduler import Job, CmdLineJob, FunctionJob
+from ...utils.download import check_binary
 
 # GCA_003774525.2 GCA_015190445.1 GCA_01519
 
@@ -22,64 +20,42 @@ naming = {
 }
 
 
-class NCBI:
+class NCBI(Source):
     """
     The NCBI class represents a data downloader for the National Center for Biotechnology Information (NCBI) database.
-
-    Attributes:
-        ncbi_joib_id (int): The ID counter for NCBI jobs.
-        tmp_dir (str): The temporary directory path.
-        bin_dir (str): The binary directory path.
-        logger: The logger object for logging messages.
-        mutex: The mutex lock for thread synchronization.
-        bin (str): The path to the NCBI download software.
-        last_ncbi_query (float): The timestamp of the last NCBI query.
-
-    Methods:
-        __init__(self, tmpdir, bindir, logger): Initializes a new instance of the NCBI class.
-        is_ready(self): Checks if the NCBI download software is ready.
-        ncbi_delay_ready(self): Checks if the minimum delay between NCBI queries has passed.
-        jobs_from_accessions(self, accessions, dest_dir): Generates a list of jobs for downloading and processing accessions.
-        clean(self, unzip_dir, dest_dir, tmp_dir): Cleans up the downloaded files and moves them to the destination directory.
-        filter_valid_accessions(self, accessions): Filters and validates a list of accessions.
-        get_download_software(self): Checks if the NCBI download software is installed and returns the path.
-        install_datasets_software(self): Installs the NCBI download software if it is not already installed.
     """
 
     ncbi_joib_id = 0
+
 
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
         """
         Initializes a new instance of the NCBI downloader class.
 
-        Args:
-            tmpdir (str): The temporary directory path.
-            bindir (str): The binary directory path.
-            logger: The logger object for logging messages.
+        :param tmpdir: The temporary directory path.
+        :param bindir: The binary directory path.
+        :param logger: The logger object for logging messages.
         """
-        self.tmp_dir = tmpdir
-        self.bin_dir = bindir
-        self.logger = logger
-        self.mutex = Lock()
+        super().__init__(tmpdir, bindir, logger)
 
         self.bin = self.get_download_software()
-        self.last_ncbi_query = 0
+        """The path to the NCBI download software."""
+
 
     def is_ready(self) -> bool:
         """
-        Checks if the NCBI download software is ready.
+        Checks if the NCBI download software is ready to be used.
 
-        Returns:
-            bool: True if the software is ready, False otherwise.
+        :return: True if the software is ready, False otherwise.
         """
         return self.bin is not None
-    
-    def ncbi_delay_ready(self) -> bool:
+
+
+    def src_delay_ready(self) -> bool:
         """
         Checks if the minimum delay between NCBI queries has passed.
 
-        Returns:
-            bool: True if the delay has passed, False otherwise.
+        :return: True if the delay has passed, False otherwise.
         """
         # Minimal delay between ncbi queries (1s)
         min_delay = 1
@@ -87,35 +63,34 @@ class NCBI:
         ready = False
         if locked:
             # 5s since the last query ?
-            ready = time.time() - self.last_ncbi_query > min_delay
+            ready = time.time() - self.last_query > min_delay
             if ready:
-                self.last_ncbi_query = time.time()
+                self.last_query = time.time()
             self.mutex.release()
         return ready
-    
+
+
     def wait_ncbi_delay(self) -> threading.Lock:
         """
-            Wait for the NCBI ressource to be available (some delay between queries must be waited). Once the delay has passed, it acquires a mutex lock to ensure that no other operation is queriing instead.
+        Wait for the NCBI ressource to be available (some delay between queries must be waited).
+        Once the delay has passed, it acquires a mutex lock to ensure that no other operation is queriing instead.
 
-            Returns:
-                threading.Lock: The NCBI query lock.
+        :return: The NCBI query lock.
         """
-        while not self.ncbi_delay_ready():
-            time.sleep(time.time() - self.last_ncbi_query)
+        while not self.src_delay_ready():
+            time.sleep(time.time() - self.last_query)
 
         self.mutex.acquire()
         return self.mutex
-    
+
+
     def jobs_from_accessions(self, accessions: list[str], dest_dir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing accessions.
 
-        Args:
-            accessions (list): The list of accessions to download.
-            dest_dir (str): The destination directory path.
-
-        Returns:
-            list: A list of jobs for downloading and processing accessions.
+        :param accessions: The list of accessions to download.
+        :param dest_dir: The destination directory path.
+        :return: A list of jobs for downloading and processing accessions.
         """
         to_download = []
         for acc in accessions:
@@ -141,9 +116,9 @@ class NCBI:
             download_file = path.join(tmp_dir, f'{job_name}.zip')
             download_job = CmdLineJob(f"{self.bin} download genome accession --dehydrated --no-progressbar "
                                       f"--filename {download_file} {' '.join(acc_slice)}",
-                                      can_start=self.ncbi_delay_ready,
+                                      can_start=self.src_delay_ready,
                                       name=f'{job_name}_download')
-            
+
             # Unzip Job
             unzip_dir = path.join(tmp_dir, job_name)
             unzip_job = CmdLineJob(f"unzip -n {download_file} -d {unzip_dir}",
@@ -153,7 +128,7 @@ class NCBI:
             # Data download
             rehydrate_job = CmdLineJob(f"{self.bin} rehydrate --gzip --no-progressbar --directory {unzip_dir}",
                                        parents=[unzip_job],
-                                       can_start=self.ncbi_delay_ready,
+                                       can_start=self.src_delay_ready,
                                        name=f'{job_name}_rehydrate')
 
             # Data reorganization
@@ -171,10 +146,9 @@ class NCBI:
         """
         Cleans up the downloaded files and moves them to the destination directory.
 
-        Args:
-            unzip_dir (str): The directory path where the files are unzipped.
-            dest_dir (str): The destination directory path.
-            tmp_dir (str): The temporary directory path.
+        :param unzip_dir: The directory path where the files are unzipped.
+        :param dest_dir: The destination directory path.
+        :param tmp_dir: The temporary directory path.
         """
         # Remove subdirectories while moving their content
         data_dir = path.join(unzip_dir, "ncbi_dataset", "data")
@@ -193,17 +167,16 @@ class NCBI:
 
     @staticmethod
     def is_valid_acc_format(acc: str) -> bool:
-        """
+        r"""
         Check if the given accession number is in a valid format.
         An accession number is considered valid if it:
-        - Starts with 'GCA_' or 'GCF_'
+        - Starts with 'GCA\_' or 'GCF\_'
         - Contains a period ('.') separating the ID and version
         - The ID part is exactly 9 digits long
         - Both the ID and version parts are numeric
-        Parameters:
-        acc (str): The accession number to validate.
-        Returns:
-        bool: True if the accession number is in a valid format, False otherwise.
+
+        :param acc: The accession number to validate.
+        :return: True if the accession number is in a valid format, False otherwise.
         """
         if not (acc.startswith('GCA_') or acc.startswith('GCF_')):
             return False
@@ -211,23 +184,20 @@ class NCBI:
         acc = acc[4:]
         if '.' not in acc:
             return False
-        
+
         id, version = acc.split('.')
         if len(id) != 9 or not id.isdigit() or not version.isdigit():
             return False
-        
+
         return True
-    
+
 
     def filter_valid_accessions(self, accessions: set[str]) -> set[str]:
         """
         Filters and validates a list of accessions.
 
-        Args:
-            accessions (set): The set of accessions to filter and validate.
-
-        Returns:
-            set: The set of valid accessions.
+        :param accessions: The set of accessions to filter and validate.
+        :return: The set of valid accessions.
         """
         accessions_list = [acc for acc in accessions if self.is_valid_acc_format(acc)]
         invalid_accessions = list(accessions - set(accessions_list))
@@ -273,35 +243,34 @@ class NCBI:
             self.logger.warning(f'Unknown accessions: {", ".join(unknown_accessions)}')
 
         return valid_accessions
-    
+
 
     def get_download_software(self) -> str|None:
         """
         Checks if the NCBI download software is installed and returns the path.
 
-        Returns:
-            str: The path to the NCBI download software, or None if it is not installed.
+        :return: The path to the NCBI download software, or None if it is not installed.
         """
         # Check if the system has the ncbi datasets cli
         system_installed = check_binary('datasets')
         if system_installed:
             return 'datasets'
-        
+
         # Check if the software is locally installed
         local_bin = path.abspath(path.join(self.bin_dir, 'datasets'))
         locally_installed = check_binary(local_bin)
         if locally_installed:
             return f'{local_bin}'
-        
+
         # Install the software
         return self.install_datasets_software()
+
 
     def install_datasets_software(self) -> str|None:
         """
         Installs the NCBI download software if it is not already installed.
 
-        Returns:
-            str: The path to the installed NCBI download software, or None if installation fails.
+        :return: The path to the installed NCBI download software, or None if installation fails.
         """
         download_link = ''
         supported = True
@@ -328,11 +297,11 @@ class NCBI:
 
         # Download datasets
         self.logger.info('Download the ncbi datasets cli binnary...')
-        
+
         # Prepare the bin directory
         download_dir = path.abspath(self.bin_dir)
         makedirs(download_dir, exist_ok=True)
-        
+
         # Download...
         cmd = f'curl -o {path.join(download_dir, "datasets")} {download_link}'
         ret = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -356,4 +325,3 @@ class NCBI:
             self.logger.error(f'Failed to download ncbi datasets cli from: {download_link}')
 
         return None
-    

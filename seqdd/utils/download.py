@@ -1,6 +1,6 @@
+import logging
 from os import path, makedirs
 from shutil import rmtree
-from sys import stderr
 import subprocess
 import time
 
@@ -11,27 +11,38 @@ from ..register.src_manager import SourceManager
 # -------------------- Global download manager --------------------
 
 class DownloadManager:
+    """
+    Class to handle download from different source
+    """
 
     def __init__(self, register: Register, src_manager: SourceManager,
-                 logger: str, bindir: str ='bin', tmpdir: str ='/tmp'):
+                 logger: logging.Logger, bindir: str ='bin', tmpdir: str ='/tmp'):
+        """
+
+        :param register:
+        :param src_manager:
+        :param logger: The logger object.
+        :param bindir: The binary directory path. Where the helper binaries tools are stored.
+        :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
+        """
         self.register = register
-
-        self.bindir = bindir
-        self.tmpdir = tmpdir
+        """The sources register"""
+        self.bin_dir = bindir
+        """The binary directory path. Where the helper binaries tools are stored."""
+        self.tmp_dir = tmpdir
+        """The temporary directory path. Where the downloaded intermediate files are located."""
         self.logger = logger
-
+        """The logger object for logging messages."""
         self.src_manager = src_manager
 
 
-    def download_to(self, datadir, logdir, max_process=8):
+    def download_to(self, datadir, logdir, max_process=8) -> None:
         """
         Downloads datasets from different sources to the specified data directory.
 
-        Args:
-            datadir (str): The path to the data directory where the datasets will be downloaded.
-            logdir (str): The path to the log directory where the log files will be stored.
-            max_process (int, optional): The maximum number of processes to use for downloading. Defaults to 8.
-
+        :param datadir: The path to the data directory where the datasets will be downloaded.
+        :param logdir: The path to the log directory where the log files will be stored.
+        :param max_process: The maximum number of processes to use for downloading. Defaults to 8.
         """
         # Creates the tmp and data directory if it doesn't exist
         makedirs(datadir, exist_ok=True)
@@ -52,7 +63,8 @@ class DownloadManager:
                     jobs[source] = manipulator.jobs_from_accessions(reg, datadir)
                     self.logger.info(f'{len(reg)} datasets from {source} will be downloaded.')
                 else:
-                    self.logger.warning(f'{source} datasets cannot be downloaded because the downloader is not ready. Skipping {len(reg)} datasets.', file=stderr)
+                    self.logger.warning(f'{source} datasets cannot be downloaded because the downloader is not ready. '
+                                        f'Skipping {len(reg)} datasets.')
 
         # Create a JobManager instance
         manager = JobManager(max_process=max_process, log_folder=logdir, logger=self.logger)
@@ -81,10 +93,11 @@ class DownloadManager:
 # -------------------- Utils downloads --------------------
 
 
-def check_binary(path_to_bin):
-    """ Check if the binary is present and executable
-    :param: path_to_bin Path to the binary
+def check_binary(path_to_bin: str) -> bool:
+    """
+    Check if the binary is present and executable
 
+    :param: path_to_bin Path to the binary
     :return: True if the binary is present and executable. False otherwise.
     """
     try:
