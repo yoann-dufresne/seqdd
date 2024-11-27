@@ -107,7 +107,7 @@ Subcommand add:
 
 Example with ncbi genome accessions
 ```bash
-    seqdd add --sources ncbi --accessions ACCESSION1 ACCESSION2 --file-of-accessions accessions.txt
+    seqdd add --sources_ko ncbi --accessions ACCESSION1 ACCESSION2 --file-of-accessions accessions.txt
 ```
 
 ## Download the dataset from an already setup register

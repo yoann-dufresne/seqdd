@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Callable
+import abc
 import logging
 from os import path
 import sys
@@ -14,6 +15,12 @@ from typing import Any
 class JobManager(Thread):
 
     def __init__(self, logger: logging.Logger, max_process: int = 8, log_folder: str|None = None) -> None:
+        """
+
+        :param logger: The logger object.
+        :param max_process: the maximum number of process to run at same time
+        :param log_folder: The path to the directory where to write the logs
+        """
         super().__init__()
         # Jobs queues
         self.processes = []
@@ -29,9 +36,15 @@ class JobManager(Thread):
         self.stopped.clear()
 
     def stop(self) -> None:
+        """
+        Stop this thread
+        """
         self.stopped.set()
 
     def run(self) -> None:
+        """
+        Start a new thread
+        """
         # Run the tasks
         while not self.stopped.is_set():
             # Check currently running processes
@@ -85,6 +98,10 @@ class JobManager(Thread):
                 job.join()
 
     def cancel_job(self, job: Job) -> None:
+        """
+
+        :param job:
+        """
         self.logger.warning(f'CANCEL {job}')
         # Cancel descendance
         if job in self.dependancies:
@@ -99,6 +116,10 @@ class JobManager(Thread):
         job.stop()        
 
     def add_job(self, process: Job):
+        """
+        add a new job and it's dependencies in the queue
+        :param process: add a new job to run
+        """
         # Modify the log file path
         if self.log_folder is not None:
             logfile_base = path.basename(process.log_file)
@@ -115,63 +136,68 @@ class JobManager(Thread):
         self.waiting.append(process)
         self.processes.append(process)
 
+
     def remaining_jobs(self) -> int:
+        """
+        :return: The number of job that are running or waiting to start
+        """
         return len(self.waiting) + len(self.running)
 
+
     def add_jobs(self, processes: Iterable[Job]) -> None:
+        """
+        Add several jobs in the queue
+        :param processes: The jobs to add
+        """
         for p in processes:
             # Add the process
             self.add_job(p)
+
 
     def __repr__(self):
         return f'running: {len(self.running)}\nwaiting: {len(self.waiting)}\ntotal: {len(self.processes)}\n{self.dependancies}'
 
 
-class Job:
-    ID = 0
-
+class Job(metaclass=abc.ABCMeta):
     """
     A class to represent a Job.
-
-    ...
-
-    Attributes
-    ----------
-    process : Depends on the job type
-        Subprocess that runs outside of the python program
-    is_over : bool
-        True if the job is finished or canceled
-    parents : Array
-        A list of parent jobs to wait before running this one.
-    can_start : Function
-        A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
     """
+
+    ID = 0
+
+
     def __init__(self, name: str|None =None, parents: list[Job]|None =None,
                  can_start: Callable = lambda:True,
                  log_file:str|None = None) -> None:
         """
-        Constructs all the necessary attributes for the person object.
 
-        Parameters
-        ----------
-            parents : Array
-                A list of parent jobs to wait before running this one.
-            can_start : Function
-                A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+        :param name: The name of this job
+        :param parents: the Jobs this job depends on, A list of parent jobs to wait before running this one.
+        :param can_start: A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
+        :param log_file: the name of the file to write logs
         """
         self.name = name if name is not None else f'Job_{Job.ID}'
         self.log_file = log_file if log_file is not None else f'{self.name}.log'
         Job.ID += 1
 
         self.parents = [] if parents is None else parents
+        """A list of parent jobs to wait before running this one."""
         self.is_over = False
+        """True if the job is finished or canceled"""
         self.process = None
+        """Subprocess that runs outside of the python program, depends on the job type"""
         self.can_start = can_start
+        """A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start"""
+
 
     def set_log_file(self, log_file: str) -> None:
         self.log_file = log_file
 
     def is_ready(self) -> bool:
+        """
+
+        :return:  True if this Job is redy to start. False otherwise.
+        """
         # Already over
         if self.is_over:
             return False
@@ -181,38 +207,38 @@ class Job:
         # Are all the conditions to run present ?
         return self.can_start()
 
-    def start(self):
+    @abc.abstractmethod
+    def start(self) -> None:
         raise NotImplementedError()
 
-    def stop(self):
+    @abc.abstractmethod
+    def stop(self) -> None:
         raise NotImplementedError()
 
-    def get_returncode(self):
+    @abc.abstractmethod
+    def get_returncode(self)-> int | None:
         raise NotImplementedError()
 
-    def join(self):
+    @abc.abstractmethod
+    def join(self) -> None:
         raise NotImplementedError()
 
 
 class FunctionJob(Job):
-    '''
+    """
     A Job class that wrap a function to run in a subprocess.
-    '''
+    """
+
     def __init__(self, func_to_run: Callable, func_args: tuple[Any, ...] = (),
                  parents: list[Job] = None, can_start: Callable = lambda:True,
                  name: str|None = None, log_file: str|None = None):
-        '''
-            Parameters
-            ----------
-            func_to_run: Function
-                The function to run inside the subprocess.
-            func_args: Tuple
-                A tuple of arguments to give to the function to run
-            parents : Array
-                A list of parent jobs to wait before running this one.
-            can_start : Function
-                A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
-        '''
+        """
+        :param func_to_run: The function to run inside the subprocess.
+        :param func_args: A tuple of arguments to give to the function to run
+        :param parents: A list of parent jobs to wait before running this one.
+        :param can_start: A function that is called when the job is ready and before starting it.
+                         The function must return True when the job is allowed to start
+        """
         name = name if name is not None else f'FunctionJob_{Job.ID}'
         log_file = log_file if log_file is not None else f'{name}.log'
         super().__init__(parents=parents, can_start=can_start, name=name, log_file=f'{name}.log')
@@ -222,6 +248,10 @@ class FunctionJob(Job):
 
 
     def wrapping_function(self) -> None:
+        """
+
+        :return:
+        """
         with open(self.log_file, 'w') as fw:
             sys.stdout = fw
             sys.stderr = fw
@@ -234,11 +264,18 @@ class FunctionJob(Job):
                 print(e, file=fw)
                 raise e
 
+
     def start(self) -> None:
+        """
+        Start this job (in a subprocess)
+        """
         self.process.start()
 
 
     def stop(self) -> None:
+        """
+        Stop this job
+        """
         self.is_over = True
         if self.process is None:
             return
@@ -249,15 +286,29 @@ class FunctionJob(Job):
         if self.process.is_alive():
             self.process.terminate()
 
-    def get_returncode(self) -> int|None:
+
+    def get_returncode(self) -> int | None:
+        """
+
+        :return: The job returncode
+        """
         if self.process is None:
             return None
         return self.process.exitcode
 
+
     def join(self) -> None:
+        """
+        Wait until the job terminates.
+        """
         self.process.join()
 
+
     def is_alive(self) -> bool:
+        """
+
+        :return: True if this Jb is running or waiting, False otherwise
+        """
         alive = self.process.is_alive()
         if not alive:
             self.is_over = True
@@ -269,33 +320,39 @@ class FunctionJob(Job):
 
 
 class CmdLineJob(Job):
-    '''
+    """
     A Job class that wrap a command line to run in a subprocess.
-    '''
+    """
+
+
     def __init__(self, command_line: str, parents: list[Job]=None,
                  can_start: Callable = lambda:True,
                  name: str = None,
                  log_file: str = None) -> None:
-        '''
-            Parameters
-            ----------
-            command_line: string
-                A command line to run in a bash subprocess.
-            parents : Array
-                A list of parent jobs to wait before running this one.
-            can_start : Function
-                A function that is called when the job is ready and before starting it. The function must return True when the job is allowed to start
-        '''
+        """
+
+        :param command_line: A command line to run in a bash subprocess.
+        :param parents: A list of parent jobs to wait before running this one.
+        :param can_start: The function must return True when the job is allowed to start
+        """
         name = name if name is not None else f'CmdLineJob_{Job.ID}'
         log_file = log_file if log_file is not None else f'{name}.log'
         super().__init__(parents=parents, can_start=can_start, name=name, log_file=log_file)
         self.cmd = command_line
 
+
     def start(self) -> None:
+        """
+        Start this job (in a subprocess).
+        """
         with open(self.log_file, 'w') as fw:
             self.process = subprocess.Popen(self.cmd, shell=True, stdout=fw, stderr=fw)
 
+
     def stop(self) -> None:
+        """
+        Wait until the job terminates.
+        """
         self.is_over = True
         if self.process is None:
             return
@@ -305,14 +362,24 @@ class CmdLineJob(Job):
         if self.process.returncode is None:
             self.process.terminate()
 
+
     def is_alive(self) -> bool:
+        """
+
+        :return: True if this Jb is running or waiting, False otherwise
+        """
         alive = self.process.poll() is None
         if not alive:
             self.is_over = True
             self.process.communicate()
         return alive
 
+
     def get_returncode(self) -> int|None:
+        """
+
+        :return: The job returncode
+        """
         if self.process is None:
             return None
         if self.is_alive():
@@ -320,7 +387,11 @@ class CmdLineJob(Job):
         return self.process.returncode
 
     def join(self) -> None:
+        """
+        Wait until the job terminates.
+        """
         self.process.communicate()
+
 
     def __repr__(self) -> str:
         return f'CmdLineJob [ {self.cmd} ]'
