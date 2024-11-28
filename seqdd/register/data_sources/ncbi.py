@@ -13,12 +13,6 @@ from ...utils.download import check_binary
 
 # GCA_003774525.2 GCA_015190445.1 GCA_01519
 
-naming = {
-    'name': 'NCBI',
-    'key': 'ncbi',
-    'classname': 'NCBI'
-}
-
 
 class NCBI(DataSource):
     """

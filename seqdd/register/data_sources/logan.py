@@ -8,12 +8,6 @@ from shutil import rmtree, move
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from . import DataSource
 
-naming = {
-    'name': 'Logan',
-    'key': 'logan',
-    'classname': 'Logan',
-}
-
 
 class Logan(DataSource):
     """

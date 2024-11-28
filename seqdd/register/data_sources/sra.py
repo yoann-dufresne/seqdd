@@ -10,13 +10,6 @@ from ...utils.download import check_binary
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
-naming = {
-    'name': 'SRA',
-    'key': 'sra',
-    'classname': 'SRA'
-}
-
-
 class SRA(DataSource):
     """
     The SRA class represents a data downloader for the Sequence Read Archive (SRA) database.
