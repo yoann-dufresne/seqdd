@@ -10,13 +10,6 @@ from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from ...errors import DownloadError
 
 
-naming = {
-    'name': 'ENA',
-    'key': 'ena',
-    'classname': 'ENA'
-}
-
-
 class ENA(DataSource):
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.

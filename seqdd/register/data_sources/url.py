@@ -8,11 +8,6 @@ from urllib.parse import urlparse
 from ...utils.scheduler import CmdLineJob
 from . import DataSource
 
-naming = {
-    'name': 'url',
-    'key': 'url',
-    'classname': 'URL'
-}
 
 class URL(DataSource):
     """
