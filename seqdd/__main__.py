@@ -7,7 +7,7 @@ from sys import stderr
 from tempfile import gettempdir
 
 from .register.reg_manager import save_source, create_register, Register
-from .register.src_manager import SourceManager
+from .register.src_manager import DataSourceLoader, SourceManager
 from .utils.download import DownloadManager
 
 
@@ -59,7 +59,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                                 help='Add dataset(s) to manage',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     add.add_argument('-s', '--source',
-                     choices=SourceManager.source_keys(),
+                     choices=DataSourceLoader().keys(),
                      help='Download source. Can download from ncbi genomes, '
                           'sra or an arbitrary url (uses wget to download)',
                      required=True)

@@ -4,7 +4,7 @@ from shutil import rmtree
 from typing import Iterable
 import re
 
-from seqdd.register.src_manager import SourceManager
+from seqdd.register.src_manager import DataSourceLoader
 
 
 
@@ -33,7 +33,7 @@ class Register:
         self.logger = logger
 
         # Initialize the subregisters
-        self.acc_by_src = {k: set() for k in SourceManager.source_keys()}
+        self.acc_by_src = {k: set() for k in DataSourceLoader().keys()}
 
         if dirpath is not None:
             self.load_from_dir(dirpath)
@@ -132,7 +132,7 @@ class Register:
                                   f'the tool awaits maximum version {Register.major_version}.{Register.minor_version} .'
                                   f' Skipping the loading')
                 return
-            
+
             # Remaining line to read until the end of the current subregister
             remaining_to_read = 0
             current_register = None
@@ -151,7 +151,7 @@ class Register:
 
         self.logger.debug(f'Data from {file} successfully loaded')
 
-    
+
     def remove_accession(self, source: str, accession: str) -> None:
         """
         Removes an accession from a source.
