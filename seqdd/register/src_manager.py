@@ -76,17 +76,17 @@ class DataSourceLoader:
         return list(self._data_sources.keys())
 
 
-    def data_sources(self) -> list[DataSource]:
+    def data_sources(self) -> list[Type[DataSource]]:
         """
         :return: The list of data sources
         """
         return list(self._data_sources.values())
 
 
-    def __getitem__(self, ds_name) -> DataSource:
+    def __getitem__(self, ds_name) -> Type[DataSource]:
         """
         :param ds_name: the name of the data source (in lower case)
-        :return: The corresponding
+        :return: The corresponding class (not the object).
         :raise KeyError: if the ds_name does not exists
         """
         try:
@@ -95,7 +95,7 @@ class DataSourceLoader:
             raise KeyError(f"The data source {ds_name} does not exists. The available data source are: {self.keys()}")
 
 
-    def items(self) -> list[tuple[str, DataSource]]:
+    def items(self) -> list[tuple[str, Type[DataSource]]]:
         """
 
         :return: The list of tuple data source name, DataSource
@@ -107,30 +107,26 @@ class DataSourceLoader:
         """
         :return: The list of modules in sources package
         """
-        # Charger le module principal
-
+        # load the root data_source package
         module = importlib.import_module(self._src_module_name)
 
-        # Lister les sous-modules
+        # List all sub-modules
         submodules = [name for _, name, _ in pkgutil.iter_modules(module.__path__)]
 
-        # Charger dynamiquement chaque sous-module et les ajouter à une liste
+        # Dynamically load each sub module and add them to a list
         loaded_sources = [importlib.import_module(f"{self._src_module_name}.{submodule}") for submodule in submodules]
         return loaded_sources
 
 
-    def _get_available_data_sources(self) -> set:
+    def _get_available_data_sources(self) -> set[Type[DataSource]]:
         """
-        dynamically fill the register with the different available data sources
+        dynamically load available data sources **class** (not instantiated)
         a data source is:
 
          * a Class which is in data_sources package
          * This class must inherits from :class:`seqdd.register.data_sources.DatSource`
          * This class must implement :class:`seqdd.register.data_sources.DatSource`
 
-        :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
-        :param bindir: Where the helper binaries tools are stored.
-        :param logger: The logger object for logging messages.
         """
         def is_data_source(ds):
             return issubclass(ds, DataSource) and not inspect.isabstract(ds)
