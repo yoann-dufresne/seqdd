@@ -4,7 +4,6 @@ import subprocess
 import time
 from os import listdir, makedirs, path
 from shutil import rmtree, move
-from threading import Lock
 
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from . import DataSource
@@ -22,8 +21,8 @@ class Logan(DataSource):
     """
 
     # 'SRR[0-9]{6,}'
-    
-    
+
+
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, unitigs: bool = False) -> None:
         """
         Initialize the ENA downloader object.
@@ -86,7 +85,7 @@ class Logan(DataSource):
             time.sleep(0.01)
         self.mutex.acquire()
 
-    
+
     # --- ENA Job creations ---
 
     def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
@@ -101,7 +100,7 @@ class Logan(DataSource):
 
         # Checking already downloaded accessions
         downloaded_accessions = frozenset(listdir(datadir))
-        
+
         self.logger.info(f'Creating jobs for {len(accessions) - len(downloaded_accessions)} Logan/SRA accessions')
 
         # Each dataset download is independent
@@ -137,7 +136,7 @@ class Logan(DataSource):
                 can_start = self.src_delay_ready,
                 name=f'{job_name}_download'
             ))
-            
+
             # Create a function job to move the files to the final directory
             jobs.append(FunctionJob(
                 func_to_run = self.move_and_clean,
@@ -147,8 +146,8 @@ class Logan(DataSource):
             ))
 
         return jobs
-    
-    
+
+
     def move_and_clean(self, accession_dir: str, outdir: str) -> None:
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
@@ -161,7 +160,7 @@ class Logan(DataSource):
 
         move(accession_dir, dest_dir)
 
-    
+
     def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.
@@ -191,7 +190,7 @@ class Logan(DataSource):
             elif not response.stdout.decode().startswith('HTTP/1.1 200'):
                 self.logger.warning(f'Contigs of the accession not found on the Amazon S3 bucket: {acc}')
                 continue
-            
+
             acc = f"{acc}_{'unitigs' if self.unitigs else 'contigs'}"
             valid_accessions.append(acc)
 
