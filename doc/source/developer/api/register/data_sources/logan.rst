@@ -5,16 +5,16 @@
     SeqDD is distributed under the terms of the GNU General Public License (GPLv3).
     See the COPYING file for details.
 
+.. _logan_api:
 
-.. _sources_api:
+=========
+Logan API
+=========
 
-==========
-Source API
-==========
+Classes to handle the Assemblies made on top of SRA: *Logan*
 
-Base class of all kind of Source
 
-.. autoclass:: seqdd.register.data_sources.Source
+.. automodule:: seqdd.register.data_sources.logan
    :members:
    :private-members:
    :special-members:

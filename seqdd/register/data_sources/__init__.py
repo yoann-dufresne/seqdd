@@ -4,9 +4,9 @@ from threading import Lock
 from ...utils.scheduler import Job
 
 
-class Source(metaclass=abc.ABCMeta):
+class DataSource(metaclass=abc.ABCMeta):
     """
-    Abstract Base Class of data Source
+    Abstract Base Class of data DataSource
     """
 
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, min_delay: float = 0) -> None:

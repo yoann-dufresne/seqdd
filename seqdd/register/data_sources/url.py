@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from urllib.parse import urlparse
 
 from ...utils.scheduler import CmdLineJob
-from . import Source
+from . import DataSource
 
 naming = {
     'name': 'url',
@@ -14,7 +14,7 @@ naming = {
     'classname': 'URL'
 }
 
-class URL(Source):
+class URL(DataSource):
     """
     A class that represents a URL downloader.
     """

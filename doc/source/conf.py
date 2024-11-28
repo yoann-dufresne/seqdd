@@ -19,7 +19,9 @@ author = 'Yohann Dufresne'
 extensions = ['sphinx.ext.autodoc',
               'sphinx_autodoc_typehints',
               'sphinx.ext.todo',
-              'sphinx.ext.viewcode',]
+              'sphinx.ext.viewcode',
+              'sphinx.ext.inheritance_diagram',
+              'sphinx.ext.graphviz']
 
 templates_path = ['_templates']
 exclude_patterns = []

@@ -1,13 +1,13 @@
 import logging
-from os import listdir, makedirs, path
 import re
-from shutil import rmtree, move
 import subprocess
-from threading import Lock
 import time
+from os import listdir, makedirs, path
+from shutil import rmtree, move
+from threading import Lock
 
-from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
-
+from ...utils.scheduler import Job, CmdLineJob, FunctionJob
+from . import DataSource
 
 naming = {
     'name': 'Logan',
@@ -16,18 +16,9 @@ naming = {
 }
 
 
-class Logan:
+class Logan(DataSource):
     """
     The Logan class represents a data downloader for the Assemblies made on top of SRA.
-
-    Attributes:
-        tmpdir (str): The temporary directory path.
-        bindir (str): The binary directory path.
-        logger: The logger object for logging messages.
-        mutex: A lock object for thread synchronization.
-        min_delay (float): The minimum delay between ENA queries in seconds.
-        last_query (float): The timestamp of the last ENA query.
-
     """
 
     # 'SRR[0-9]{6,}'
@@ -37,28 +28,22 @@ class Logan:
         """
         Initialize the ENA downloader object.
 
-        Args:
-            tmpdir (str): The temporary directory path.
-            bindir (str): The binary directory path.
-            logger: The logger object.
+        :param tmpdir: The temporary directory path.
+        :param bindir: The binary directory path.
+        :param logger: The logger object.
+        :param unitigs:
         """
-        self.tmpdir = tmpdir
-        self.bindir = bindir
-        self.logger = logger
+        super().__init__(tmpdir, bindir, logger, min_delay=0.35)
 
         self.unitigs = unitigs
-        
-        self.mutex = Lock()
-        self.min_delay = 0.35
-        self.last_query = 0
+
 
     def set_option(self, option: str, value: str) -> None:
         """
         Sets an option for the downloader.
 
-        Args:
-            option (str): The option name.
-            value (str): The option value.
+        :param option: The option name.
+        :param value: The option value.
         """
         if option == 'unitigs':
             self.unitigs = value == 'True'
@@ -71,13 +56,13 @@ class Logan:
         No binaries, always ready.
         """
         return True
-    
-    def logan_delay_ready(self) -> bool :
+
+
+    def src_delay_ready(self) -> bool :
         """
         Checks if the minimum delay between queries has passed.
 
-        Returns:
-            bool: True if the minimum delay has passed, False otherwise.
+        :return: True if the minimum delay has passed, False otherwise.
         """
         # Minimal delay between Logan queries (0.35s)
         locked = self.mutex.acquire(blocking=False)
@@ -88,13 +73,16 @@ class Logan:
                 self.last_query = time.time()
             self.mutex.release()
         return ready
-    
+
+
     def wait_my_turn(self) -> None:
         """
         Waits for the minimum delay between ENA queries.
-        WARNING: The function acquires the mutex lock. You must release it after using this function.
+
+        .. warning:: The function acquires the mutex lock. You must release it after using this function.
+
         """
-        while not self.delay_ready():
+        while not self.src_delay_ready():
             time.sleep(0.01)
         self.mutex.acquire()
 
@@ -105,12 +93,9 @@ class Logan:
         """
         Generates a list of jobs for downloading and processing Logan datasets.
 
-        Args:
-            accessions (list): A list of Logan/SRA accessions.
-            datadir (str): The output directory path.
-
-        Returns:
-            list: A list of jobs for downloading and processing Logan datasets.
+        :param accessions: A list of Logan/SRA accessions.
+        :param datadir: The output directory path.
+        :return: A list of jobs for downloading and processing Logan datasets.
         """
         jobs = []
 
@@ -149,7 +134,7 @@ class Logan:
             # Create the command line job
             jobs.append(CmdLineJob(
                 command_line=f'curl -s -o {output_file} "{url}"',
-                can_start = self.logan_delay_ready,
+                can_start = self.src_delay_ready,
                 name=f'{job_name}_download'
             ))
             
@@ -168,9 +153,8 @@ class Logan:
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
-        Args:
-            accession_dir (str): The directory path containing the downloaded files.
-            outdir (str): The output directory path.
+        :param accession_dir: The directory path containing the downloaded files.
+        :param outdir: The output directory path.
         """
         acc_dirname = path.basename(accession_dir)
         dest_dir = path.join(outdir, acc_dirname)
@@ -182,11 +166,8 @@ class Logan:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.
 
-        Args:
-            accessions (list): A list of Logan/SRA accessions.
-
-        Returns:
-            list: A list of valid Logan accessions.
+        :param accessions: A list of Logan/SRA accessions.
+        :return: A list of valid Logan accessions.
         """
         valid_accessions = []
 
@@ -215,4 +196,3 @@ class Logan:
             valid_accessions.append(acc)
 
         return valid_accessions
-    

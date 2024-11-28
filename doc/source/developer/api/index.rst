@@ -13,10 +13,11 @@ SeqDD API documentation
 
     register/reg_manager
     register/src_manager
-    register/data_sources/sources
+    register/data_sources/data_sources
     register/data_sources/ena
     register/data_sources/ncbi
     register/data_sources/sra
     register/data_sources/url
+    register/data_sources/logan
     utils/download.rst
     utils/scheduler.rst
