@@ -37,6 +37,7 @@ seq.egg-info/
 # coverage chache files #
 #########################
 \.coverage
+htmlcov/
 
 ######################
 # Logs and databases #
