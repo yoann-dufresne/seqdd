@@ -5,7 +5,7 @@ import time
 from os import listdir, makedirs, path, remove
 from shutil import rmtree, move
 
-from . import Source
+from . import DataSource
 from ...utils.download import check_binary
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 
@@ -17,7 +17,7 @@ naming = {
 }
 
 
-class SRA(Source):
+class SRA(DataSource):
     """
     The SRA class represents a data downloader for the Sequence Read Archive (SRA) database.
     """

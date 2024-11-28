@@ -9,7 +9,22 @@ scheduler API reference
 =======================
 
 
+The Abstract Class `Job`` is the base classes for all kind of Jobs.
 
+.. inheritance-diagram::
+      seqdd.utils.scheduler.Job
+      seqdd.utils.scheduler.CmdLineJob
+      seqdd.utils.scheduler.FunctionJob
+   :parts: 1
+
+
+The methods:
+
+* :meth:`seqdd.utils.scheduler.Job.join`
+* :meth:`seqdd.utils.scheduler.Job.start`
+* :meth:`seqdd.utils.scheduler.Job.stop`
+
+must be implemented in concrete classes
 
 .. automodule:: seqdd.utils.scheduler
    :members:

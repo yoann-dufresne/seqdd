@@ -209,18 +209,25 @@ class Job(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def start(self) -> None:
+        """Start this job (in a subprocess)"""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def stop(self) -> None:
+        """Wait until the job terminates."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_returncode(self)-> int | None:
+        """
+
+        :return: This job returncode
+        """
         raise NotImplementedError()
 
     @abc.abstractmethod
     def join(self) -> None:
+        """Wait until the job terminates."""
         raise NotImplementedError()
 
 

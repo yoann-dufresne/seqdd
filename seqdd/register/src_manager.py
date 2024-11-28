@@ -5,7 +5,8 @@ import pkgutil
 from collections.abc import KeysView
 from typing import Type
 
-from .data_sources import Source
+from .data_sources import DataSource
+
 
 class SourceManager:
     """
@@ -28,18 +29,21 @@ class SourceManager:
             src_init = getattr(src_module, src_module.naming['classname'])
             self.sources[src_module.naming['key']] = src_init(tmpdir, bindir, logger)
 
+
     def keys(self) -> KeysView[str]:
         """
         :return: the name of the available sources for instance 'ena', 'ncbi', ...
         """
         return self.sources.keys()
 
-    def get(self, source_name:str) -> Type[Source] | None:
+
+    def get(self, source_name:str) -> Type[DataSource] | None:
         """
         :param source_name: the name of the source
-        :return: The Source corresponding to the source_name
+        :return: The DataSource corresponding to the source_name
         """
         return self.sources.get(source_name, None)
+
 
     # --- Submodules ---
     @staticmethod
@@ -50,8 +54,9 @@ class SourceManager:
         src_modules = SourceManager.list_and_load_sources()
         return [mod.naming['key'] for mod in src_modules if hasattr(mod, 'naming')]
 
+
     @staticmethod
-    def list_and_load_sources() -> list[Type[Source]]:
+    def list_and_load_sources() -> list[Type[DataSource]]:
         """
         :return: The list of modules in sources package
         """

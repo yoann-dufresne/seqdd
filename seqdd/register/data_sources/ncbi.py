@@ -7,7 +7,7 @@ import threading
 from os import listdir, makedirs, path
 from shutil import rmtree, move
 
-from . import Source
+from . import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from ...utils.download import check_binary
 
@@ -20,7 +20,7 @@ naming = {
 }
 
 
-class NCBI(Source):
+class NCBI(DataSource):
     """
     The NCBI class represents a data downloader for the National Center for Biotechnology Information (NCBI) database.
     """

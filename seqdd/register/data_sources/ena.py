@@ -5,7 +5,7 @@ from shutil import rmtree, move
 import subprocess
 import time
 
-from . import Source
+from . import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from ...errors import DownloadError
 
@@ -17,7 +17,7 @@ naming = {
 }
 
 
-class ENA(Source):
+class ENA(DataSource):
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
     """
