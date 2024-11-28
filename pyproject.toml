@@ -40,7 +40,7 @@ seqdd = "seqdd.__main__:main"
 
 [tool.coverage.run]
 branch = true
-include = ["seqdd/*"]
+source = ["seqdd"]
 command_line = "-m unittest discover -vv -s tests"
 
 [tool.ruff]
