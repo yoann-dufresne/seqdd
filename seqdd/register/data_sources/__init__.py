@@ -37,12 +37,14 @@ class DataSource(metaclass=abc.ABCMeta):
         """
         pass
 
+
     @abc.abstractmethod
     def src_delay_ready(self) -> bool:
         """
         :return: True if the minimum delay has passed between queries, False otherwise.
         """
         pass
+
 
     @abc.abstractmethod
     def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:

@@ -35,11 +35,13 @@ class JobManager(Thread):
         self.stopped = Event()
         self.stopped.clear()
 
+
     def stop(self) -> None:
         """
         Stop this thread
         """
         self.stopped.set()
+
 
     def run(self) -> None:
         """
@@ -97,6 +99,7 @@ class JobManager(Thread):
                 job.stop()
                 job.join()
 
+
     def cancel_job(self, job: Job) -> None:
         """
 
@@ -113,7 +116,8 @@ class JobManager(Thread):
             self.running.remove(job)
         if job in self.waiting:
             self.waiting.remove(job)
-        job.stop()        
+        job.stop()
+
 
     def add_job(self, process: Job):
         """
@@ -152,7 +156,6 @@ class JobManager(Thread):
         for p in processes:
             # Add the process
             self.add_job(p)
-
 
     def __repr__(self):
         return f'running: {len(self.running)}\nwaiting: {len(self.waiting)}\ntotal: {len(self.processes)}\n{self.dependancies}'
@@ -393,6 +396,7 @@ class CmdLineJob(Job):
             return None
         return self.process.returncode
 
+
     def join(self) -> None:
         """
         Wait until the job terminates.
@@ -402,4 +406,3 @@ class CmdLineJob(Job):
 
     def __repr__(self) -> str:
         return f'CmdLineJob [ {self.cmd} ]'
-        
