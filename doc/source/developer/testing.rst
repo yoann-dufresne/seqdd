@@ -26,13 +26,13 @@ To run all the tests (in the virtualenv)
 
 .. code-block:: shell
 
-    python -m unittest discover -s tests/
+    python -m unittest discover
 
 To increase verbosity of output
 
 .. code-block:: shell
 
-    python -m unittest discover -vv -s tests/
+    python -m unittest discover -vv
 
 .. code-block:: text
 
@@ -105,35 +105,8 @@ To compute the coverage
 
     coverage run
 
-then display a report
+.. code-block::
 
-.. code-block:: shell
-
-    coverage report
-
-.. code-block:: text
-
-    Name                                 Stmts   Miss Branch BrPart  Cover
-    ----------------------------------------------------------------------
-    seqdd/__init__.py                        0      0      0      0   100%
-    seqdd/errors.py                          4      0      0      0   100%
-    seqdd/register/__init__.py               0      0      0      0   100%
-    seqdd/register/sources/__init__.py      27      3      0      0    89%
-    seqdd/register/sources/ena.py          162     91     60      5    40%
-    seqdd/utils/__init__.py                  0      0      0      0   100%
-    seqdd/utils/scheduler.py               202    131     66      0    26%
-    ----------------------------------------------------------------------
-    TOTAL                                  395    225    126      5    36%
-
-
-If you want to force computation for python files in seqdd
-
-.. code-block:: shell
-
-    coverage run --source=seqdd
-
-    ... inorout.py:461: CoverageWarning: --include is ignored because --source is set (include-ignored)
-    self.warn("--include is ignored because --source is set", slug="include-ignored")
     test_ena (test_ena.TestEna.test_ena) ... ok
     test_is_ready (test_ena.TestEna.test_is_ready) ... ok
     test_jobs_from_accessions (test_ena.TestEna.test_jobs_from_accessions) ... ok
@@ -141,38 +114,43 @@ If you want to force computation for python files in seqdd
     test_move_and_clean_w_good_md5 (test_ena.TestEna.test_move_and_clean_w_good_md5) ... ok
     test_move_and_clean_wo_md5 (test_ena.TestEna.test_move_and_clean_wo_md5) ... ok
     test_src_delay_ready (test_ena.TestEna.test_src_delay_ready) ... ok
+    test_validate_accession (test_ena.TestEna.test_validate_accession) ... ok
     test_wait_my_turn (test_ena.TestEna.test_wait_my_turn) ... ok
 
     ----------------------------------------------------------------------
-    Ran 8 tests in 0.010s
+    Ran 9 tests in 0.019s
 
     OK
 
-then
+then display a report
 
 .. code-block:: shell
 
     coverage report
 
+
 .. code-block:: text
 
-    Name                                 Stmts   Miss  Cover
-    --------------------------------------------------------
-    seqdd/__init__.py                        0      0   100%
-    seqdd/__main__.py                      137    137     0%
-    seqdd/register/__init__.py               0      0   100%
-    seqdd/register/reg_manager.py          112    112     0%
-    seqdd/register/sources/__init__.py      27     15    44%
-    seqdd/register/sources/ena.py          160    138    14%
-    seqdd/register/sources/ncbi.py         142    142     0%
-    seqdd/register/sources/sra.py          160    160     0%
-    seqdd/register/sources/url.py           84     84     0%
-    seqdd/register/src_manager.py           30     30     0%
-    seqdd/utils/__init__.py                  0      0   100%
-    seqdd/utils/download.py                 54     54     0%
-    seqdd/utils/scheduler.py               202    152    25%
-    --------------------------------------------------------
-    TOTAL                                 1108   1024     8%
+    Name                                      Stmts   Miss Branch BrPart  Cover
+    ---------------------------------------------------------------------------
+    seqdd/__init__.py                             0      0      0      0   100%
+    seqdd/__main__.py                           142    142     40      0     0%
+    seqdd/errors.py                               4      0      0      0   100%
+    seqdd/register/__init__.py                    0      0      0      0   100%
+    seqdd/register/data_sources/__init__.py      27      3      0      0    89%
+    seqdd/register/data_sources/ena.py          164     89     62      5    42%
+    seqdd/register/data_sources/logan.py         81     81     26      0     0%
+    seqdd/register/data_sources/ncbi.py         145    145     52      0     0%
+    seqdd/register/data_sources/sra.py          159    159     48      0     0%
+    seqdd/register/data_sources/url.py           83     83     38      0     0%
+    seqdd/register/reg_manager.py               112    112     52      0     0%
+    seqdd/register/src_manager.py                49     49      4      0     0%
+    seqdd/utils/__init__.py                       0      0      0      0   100%
+    seqdd/utils/download.py                      54     54     16      0     0%
+    seqdd/utils/scheduler.py                    202    131     66      0    26%
+    ---------------------------------------------------------------------------
+    TOTAL                                      1222   1048    404      5    12%
+
 
 or generate a html report
 
