@@ -89,9 +89,7 @@ class DownloadManager:
         manager.stop()
         manager.join()
 
-
 # -------------------- Utils downloads --------------------
-
 
 def check_binary(path_to_bin: str) -> bool:
     """
@@ -106,6 +104,3 @@ def check_binary(path_to_bin: str) -> bool:
         return ret.returncode == 0
     except FileNotFoundError:
         return False
-    
-
-

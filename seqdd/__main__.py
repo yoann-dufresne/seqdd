@@ -25,7 +25,6 @@ def threads_available() -> int:
     return threads_nb
 
 
-
 def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     """
     Parse the command line
@@ -308,8 +307,6 @@ def main() -> None:
         if not os.path.isdir(args.register_location):
             print('No data register found. Please first run the init command.', file=stderr)
             exit(1)
-
-
 
     # Apply the right command
     cmd_to_apply = globals()[f"on_{args.cmd}"]
