@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ErrorDetails>
+  <timestamp>1732889329181</timestamp>
+  <status>400</status>
+  <error>Bad Request</error>
+  <message>All accessions must be of the same data type as the first accession, which was ASSEMBLY.</message>
+  <path>/ena/browser/api/xml/GCA_003543015.1,SRS000006</path>
+</ErrorDetails>
