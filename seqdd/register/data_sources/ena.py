@@ -60,6 +60,7 @@ class ENA(DataSource):
             self.mutex.release()
         return ready
 
+
     def wait_my_turn(self) -> None:
         """
         Waits for the minimum delay between ENA queries.
@@ -141,6 +142,7 @@ class ENA(DataSource):
             ))
 
         return jobs
+
 
     def jobs_from_assembly(self, assembly: str, tmpdir: str, outdir: str, job_name: str) \
             -> list[Job]:
@@ -267,6 +269,7 @@ class ENA(DataSource):
             self.wait_my_turn()
             # Query the ENA database
             response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
             if response.returncode != 0:
                 self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
                 continue
@@ -286,7 +289,7 @@ class ENA(DataSource):
 
         invalid_accessions = set(accessions) - set(valid_accessions)
         if len(invalid_accessions) > 0:
-            self.logger.warning(f'Accession(s) not found on ENA servers: {", ".join(invalid_accessions)}')
+            self.logger.warning(f'Accession(s) not found on ENA servers: {", ".join(sorted(invalid_accessions))}')
 
         return valid_accessions
 
