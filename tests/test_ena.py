@@ -215,7 +215,7 @@ class TestEna(SeqddTest):
 
 
     def test_valid_accesions_on_API(self):
-        # valid_accesions_on_API use subprocess to spwan a curl subprocess
+        # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.data_sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
@@ -233,7 +233,7 @@ class TestEna(SeqddTest):
 
 
     def test_valid_accesions_on_API_unk_acc(self):
-        # valid_accesions_on_API use subprocess to spwan a curl subprocess
+        # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.data_sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
@@ -261,7 +261,7 @@ Accession(s) not found on ENA servers: {', '.join(accs)}"""
 
 
     def test_valid_accesions_on_API_bad_acc(self):
-        # valid_accesions_on_API use subprocess to spwan a curl subprocess
+        # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.data_sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
@@ -288,7 +288,7 @@ Accession(s) not found on ENA servers: {', '.join(accs)}"""
 
 
     def test_valid_accesions_on_API_mix_acc(self):
-        # valid_accesions_on_API use subprocess to spwan a curl subprocess
+        # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.data_sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
@@ -315,7 +315,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
 
 
     def test_valid_accesions_on_API_curl_failed(self):
-        # valid_accesions_on_API use subprocess to spwan a curl subprocess
+        # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.data_sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
@@ -363,7 +363,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
                          f"Invalid accession: {acc}")
 
 
-    def fake_curl(args, stdout=None, stderr=None):
+    def fake_ena_ftp_curl(args, stdout=None, stderr=None):
         cmde, url = args
         class MockResponse:
 
@@ -380,22 +380,35 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
 
         if url.startswith('https://www.ebi.ac.uk/ena/browser/api/xml/'):
             acc = url.lstrip('https://www.ebi.ac.uk/ena/browser/api/xml/').rstrip('?download=false&gzip=false&includeLinks=false')
+            if acc == 'ERR00001.BAD':
+                returncode = 12
+            else:
+                returncode = 0
+
             with open(os.path.join(os.path.dirname(__file__), 'data',f'subprocess_get_ena_ftp_url_{acc}.err'), 'rb') as f:
                 err = f.read()
             with open(os.path.join(os.path.dirname(__file__), 'data', f'subprocess_get_ena_ftp_url_{acc}.out'), 'rb') as f:
                 out = f.read()
-            return MockResponse(out, err, 0)
+            return MockResponse(out, err, returncode)
+
         elif url.startswith('https://www.ebi.ac.uk/ena/portal/api/filereport?accession='):
             acc = url.lstrip('https://www.ebi.ac.uk/ena/portal/api/filereport?accession=').rstrip('&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes')
+            if acc == 'ERR00002.BAD':
+                returncode = 22
+            else:
+                returncode = 0
+
             with open(os.path.join(os.path.dirname(__file__), 'data', f'subprocess_get_ena_ftp_url_fastq_{acc}.err'), 'rb') as f:
                 err = f.read()
             with open(os.path.join(os.path.dirname(__file__), 'data', f'subprocess_get_ena_ftp_url_fastq_{acc}.out'), 'rb') as f:
                 out = f.read()
-            return MockResponse(out, err, 0)
+            return MockResponse(out, err, returncode)
 
-    @patch('subprocess.run', side_effect=fake_curl)
+
+
+    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
     def test_get_ena_ftp_url_no_fastq(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spwan a curl subprocess
+        # get_ena_ftp_url use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         # seqdd.register.data_sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
@@ -409,17 +422,92 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
                   f'No fastq files found for accession {acc}')
 
 
-    @patch('subprocess.run', side_effect=fake_curl)
+    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
     def test_get_ena_ftp_url_fastq(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spwan a curl subprocess
+        # get_ena_ftp_url use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         # when fastq are available 2 calls to subprocess are performed
         # we cannot use a MagicMock
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
         acc = 'ERR3258091'
-        #acc = 'ERR3258149'
         to_download = ena.get_ena_ftp_url(acc)
         self.assertEqual(len(to_download), 1)
         self.assertTupleEqual(to_download[0],
                               ('ftp.sra.ebi.ac.uk/vol1/fastq/ERR325/001/ERR3258091/ERR3258091.fastq.gz', 'da03ef37d3f6f03c2a527449f7e562fd')
                               )
+
+    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
+    def test_get_ena_ftp_url_curl_failed(self, mocked_run):
+        # get_ena_ftp_url use subprocess to spawn a curl subprocess
+        # we mock subprocess run to mimic the response of ENA
+        # when fastq are available 2 calls to subprocess are performed
+        # we cannot use a MagicMock
+
+        # the first curl call return with non zero value
+        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        acc = 'ERR00001.BAD'
+        with self.catch_log(log_name='seqdd') as log:
+            to_download = ena.get_ena_ftp_url(acc)
+            log_msg = log.get_value().rstrip()
+        self.assertListEqual(to_download, [])
+        with open(self.find_data(f'subprocess_get_ena_ftp_url_{acc}.err'), 'rb') as f:
+                    err = f.read()
+        exp_msg = f"""Error querying ENA
+Query: https://www.ebi.ac.uk/ena/browser/api/xml/{acc}?download=false&gzip=false&includeLinks=false
+Answer: {err.decode().rstrip()}"""
+        self.assertEqual(log_msg, exp_msg)
+
+
+    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
+    def test_get_ena_ftp_url_curl_failed_2(self, mocked_run):
+        # get_ena_ftp_url use subprocess to spawn a curl subprocess
+        # we mock subprocess run to mimic the response of ENA
+        # when fastq are available 2 calls to subprocess are performed
+        # we cannot use a MagicMock
+
+        # the second curl call return with non zero value
+        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        acc = 'ERR00002.BAD'
+        with self.catch_log(log_name='seqdd') as log:
+            to_download = ena.get_ena_ftp_url(acc)
+            log_msg = log.get_value().rstrip()
+        self.assertListEqual(to_download, [])
+        with open(self.find_data(f'subprocess_get_ena_ftp_url_fastq_{acc}.err'), 'rb') as f:
+                    err = f.read()
+        exp_msg = f"""Error querying ENA
+Query: https://www.ebi.ac.uk/ena/portal/api/filereport?accession={acc}&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes
+Answer: {err.decode().rstrip()}"""
+
+        self.assertEqual(log_msg, exp_msg)
+
+
+    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
+    def test_get_ena_ftp_url_curl_failed_3(self, mocked_run):
+        # get_ena_ftp_url use subprocess to spawn a curl subprocess
+        # we mock subprocess run to mimic the response of ENA
+        # when fastq are available 2 calls to subprocess are performed
+        # we cannot use a MagicMock
+
+        # the second curl call return output with less than 2 lines
+        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        acc = 'ERR00003.BAD'
+        to_download = ena.get_ena_ftp_url(acc)
+        self.assertListEqual(to_download, [])
+
+
+    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
+    def test_get_ena_ftp_url_curl_failed_4(self, mocked_run):
+        # get_ena_ftp_url use subprocess to spawn a curl subprocess
+        # we mock subprocess run to mimic the response of ENA
+        # when fastq are available 2 calls to subprocess are performed
+        # we cannot use a MagicMock
+
+        # the second curl call return output with no fastq_ftp nor fastq_md5 in header
+        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        acc = 'ERR00004.BAD'
+        with self.catch_log(log_name='seqdd') as log:
+            to_download = ena.get_ena_ftp_url(acc)
+            log_msg = log.get_value().rstrip()
+        self.assertListEqual(to_download, [])
+        self.assertEqual(log_msg,
+                         f'No fastq files found for accession {acc}')
