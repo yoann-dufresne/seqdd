@@ -32,10 +32,11 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     :param logger: The object to log message
     :returns: the command line argument and options parsed
     """
+    data_sources = DataSourceLoader().keys()
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
-                    epilog='Reproducibility is crutial, let\'s try to improve it!',
+                    epilog='Reproducibility is crucial, let\'s try to improve it!',
                     formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
@@ -58,7 +59,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                                 help='Add dataset(s) to manage',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     add.add_argument('-s', '--source',
-                     choices=DataSourceLoader().keys(),
+                     choices=data_sources,
                      help='Download source. Can download from ncbi genomes, '
                           'sra or an arbitrary url (uses wget to download)',
                      required=True)
@@ -72,7 +73,9 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     add.add_argument('-t', '--tmp-directory',
                      default=os.path.join(gettempdir(), 'seqdd'),
                      help='Temporary directory to store and organize the downloaded files')
-    add.add_argument('--unitigs', action='store_true', help='Download unitigs instead of contigs for logan accessions.')
+    add.add_argument('--unitigs',
+                     action='store_true',
+                     help='Download unitigs instead of contigs for logan accessions.')
 
     # Download entries from the register
     download = subparsers.add_parser('download',
@@ -86,7 +89,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                           default=threads_available() // 2,
                           help='Number of processes to run in parallel.')
     download.add_argument('-t', '--tmp-directory',
-                          default='/tmp/seqdd',
+                          default=os.path.join(gettempdir(), 'seqdd'),
                           help='Temporary directory to store and organize the downloaded files')
     download.add_argument('--log-directory',
                           default='logs',
@@ -108,7 +111,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                                      '5 accessions are displayed per line (tabulation separated).',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     lst.add_argument('-s', '--source',
-                     choices=['ncbi', 'sra', 'url'],
+                     choices=data_sources,
                      help='List only the datasets from the given source. If not specified, list all the datasets.')
     lst.add_argument('-r', '--regular-expressions',
                      nargs='+',
@@ -120,7 +123,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                                    help='Remove dataset(s) from the register',
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     remove.add_argument('-s', '--source',
-                        choices=['ncbi', 'sra', 'url'],
+                        choices=data_sources,
                         help='Delete only from the given source. If not specified, removed from all the sources.')
     remove.add_argument('-a', '--accessions',
                         nargs='+',
