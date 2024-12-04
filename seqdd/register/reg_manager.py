@@ -117,7 +117,7 @@ class Register:
         """
         with open(file) as fr:
             # Version check
-            prefix, version = fr.readline().strip().split(' ')
+            prefix, version = fr.readline().strip().split()
             if prefix != 'version':
                 self.logger.error('Missing version number at the beginning of the reg file. Skipping the loading')
                 return
