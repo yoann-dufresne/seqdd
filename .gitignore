@@ -8,6 +8,8 @@ tmp
 ##################################
 .register/
 **/*.reg
+!/tests/data/*.reg
+
 
 ##########################
 # Python complied source #
