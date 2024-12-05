@@ -7,6 +7,7 @@ name = "seqdd"
 version = "0.0"
 authors = [
   { name="Yoann Dufresne", email="yoann.dufresne@pasteur.fr" },
+  { name="Bertrand Néron", email="bertrand.neron@pasteur.fr" },
 ]
 description = "A package to share andd download a biological sequence dataset using register files. It's goal is to simplify the download process while improving the reproducibility."
 readme = "README.md"
