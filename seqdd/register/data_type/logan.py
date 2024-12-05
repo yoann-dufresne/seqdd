@@ -1,64 +1,42 @@
 import logging
-from os import listdir, makedirs, path
 import re
-from shutil import rmtree, move
 import subprocess
-from threading import Lock
 import time
+from os import listdir, makedirs, path
+from shutil import rmtree, move
 
-from seqdd.utils.scheduler import Job, CmdLineJob, FunctionJob
-
-
-naming = {
-    'name': 'Logan',
-    'key': 'logan',
-    'classname': 'Logan',
-}
+from ...utils.scheduler import Job, CmdLineJob, FunctionJob
+from . import DataType
 
 
-class Logan:
+class Logan(DataType):
     """
     The Logan class represents a data downloader for the Assemblies made on top of SRA.
-
-    Attributes:
-        tmpdir (str): The temporary directory path.
-        bindir (str): The binary directory path.
-        logger: The logger object for logging messages.
-        mutex: A lock object for thread synchronization.
-        min_delay (float): The minimum delay between ENA queries in seconds.
-        last_query (float): The timestamp of the last ENA query.
-
     """
 
     # 'SRR[0-9]{6,}'
-    
-    
+
+
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, unitigs: bool = False) -> None:
         """
         Initialize the ENA downloader object.
 
-        Args:
-            tmpdir (str): The temporary directory path.
-            bindir (str): The binary directory path.
-            logger: The logger object.
+        :param tmpdir: The temporary directory path.
+        :param bindir: The binary directory path.
+        :param logger: The logger object.
+        :param unitigs:
         """
-        self.tmpdir = tmpdir
-        self.bindir = bindir
-        self.logger = logger
+        super().__init__(tmpdir, bindir, logger, min_delay=0.35)
 
         self.unitigs = unitigs
-        
-        self.mutex = Lock()
-        self.min_delay = 0.35
-        self.last_query = 0
+
 
     def set_option(self, option: str, value: str) -> None:
         """
         Sets an option for the downloader.
 
-        Args:
-            option (str): The option name.
-            value (str): The option value.
+        :param option: The option name.
+        :param value: The option value.
         """
         if option == 'unitigs':
             self.unitigs = value == 'True'
@@ -69,8 +47,7 @@ class Logan:
         """
         Checks if the minimum delay between queries has passed.
 
-        Returns:
-            bool: True if the minimum delay has passed, False otherwise.
+        :return: True if the minimum delay has passed, False otherwise.
         """
         # Minimal delay between Logan queries (0.35s)
         locked = self.mutex.acquire(blocking=False)
@@ -81,35 +58,35 @@ class Logan:
                 self.last_query = time.time()
             self.mutex.release()
         return ready
-    
+
+
     def wait_my_turn(self) -> None:
         """
         Waits for the minimum delay between ENA queries.
-        WARNING: The function acquires the mutex lock. You must release it after using this function.
+
+        .. warning:: The function acquires the mutex lock. You must release it after using this function.
+
         """
-        while not self.delay_ready():
+        while not self.logan_delay_ready():
             time.sleep(0.01)
         self.mutex.acquire()
 
-    
+
     # --- ENA Job creations ---
 
     def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing Logan datasets.
 
-        Args:
-            accessions (list): A list of Logan/SRA accessions.
-            datadir (str): The output directory path.
-
-        Returns:
-            list: A list of jobs for downloading and processing Logan datasets.
+        :param accessions: A list of Logan/SRA accessions.
+        :param datadir: The output directory path.
+        :return: A list of jobs for downloading and processing Logan datasets.
         """
         jobs = []
 
         # Checking already downloaded accessions
         downloaded_accessions = frozenset(listdir(datadir))
-        
+
         self.logger.info(f'Creating jobs for {len(accessions) - len(downloaded_accessions)} Logan/SRA accessions')
 
         # Each dataset download is independent
@@ -121,11 +98,12 @@ class Logan:
 
             job_name = acc_dirname
             # Create a temporary directory for the accession
-            tmp_dir = path.join(self.tmpdir, acc_dirname)
+            tmp_dir = path.join(self.tmp_dir, acc_dirname)
             if path.exists(tmp_dir):
                 rmtree(tmp_dir)
             makedirs(tmp_dir)
 
+            print(acc)
             acc, type = acc.split('_')
 
             # Get the file name from the URL
@@ -145,7 +123,7 @@ class Logan:
                 can_start = self.logan_delay_ready,
                 name=f'{job_name}_download'
             ))
-            
+
             # Create a function job to move the files to the final directory
             jobs.append(FunctionJob(
                 func_to_run = self.move_and_clean,
@@ -155,31 +133,27 @@ class Logan:
             ))
 
         return jobs
-    
-    
+
+
     def move_and_clean(self, accession_dir: str, outdir: str) -> None:
         """
         Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
 
-        Args:
-            accession_dir (str): The directory path containing the downloaded files.
-            outdir (str): The output directory path.
+        :param accession_dir: The directory path containing the downloaded files.
+        :param outdir: The output directory path.
         """
         acc_dirname = path.basename(accession_dir)
         dest_dir = path.join(outdir, acc_dirname)
 
         move(accession_dir, dest_dir)
 
-    
+
     def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.
 
-        Args:
-            accessions (list): A list of Logan/SRA accessions.
-
-        Returns:
-            list: A list of valid Logan accessions.
+        :param accessions: A list of Logan/SRA accessions.
+        :return: A list of valid Logan accessions.
         """
         valid_accessions = []
 
@@ -203,9 +177,8 @@ class Logan:
             elif not response.stdout.decode().startswith('HTTP/1.1 200'):
                 self.logger.warning(f'Contigs of the accession not found on the Amazon S3 bucket: {acc}')
                 continue
-            
+
             acc = f"{acc}_{'unitigs' if self.unitigs else 'contigs'}"
             valid_accessions.append(acc)
 
         return valid_accessions
-    

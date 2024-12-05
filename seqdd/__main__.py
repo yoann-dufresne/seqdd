@@ -1,22 +1,42 @@
 import argparse
-import tempfile
-from os import path
-from sys import stderr
-from tempfile import gettempdir
+import os
 import platform
 import re
 import logging
+import sys
+from tempfile import gettempdir
 
-from seqdd.register.reg_manager import save_source, create_register, Register
-from seqdd.register.src_manager import SourceManager
-from seqdd.utils.download import DownloadManager
+from .register.reg_manager import save_accesions_to_source, create_register, Register
+from .register.src_manager import DataSourceLoader, SourceManager
+from .utils.download import DownloadManager
 
 
-def parse_cmd() -> argparse.Namespace:
+def threads_available() -> int:
+    """
+
+    :return: The maximal number of threads available.
+             It's nice with cluster scheduler or linux.
+             On Mac it uses the number of physical cores
+    """
+    if hasattr(os, "sched_getaffinity"):
+        threads_nb = len(os.sched_getaffinity(0))
+    else:
+        threads_nb = os.cpu_count()
+    return threads_nb
+
+
+def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
+    """
+    Parse the command line
+
+    :param logger: The object to log message
+    :returns: the command line argument and options parsed
+    """
+    data_sources = DataSourceLoader().keys()
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
-                    epilog='Reproducibility is crutial, let\'s try to improve it!',
+                    epilog='Reproducibility is crucial, let\'s try to improve it!',
                     formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
@@ -39,7 +59,7 @@ def parse_cmd() -> argparse.Namespace:
                                 help='Add dataset(s) to manage',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     add.add_argument('-s', '--source',
-                     choices=SourceManager.source_keys(),
+                     choices=data_sources,
                      help='Download source. Can download from ncbi genomes, '
                           'sra or an arbitrary url (uses wget to download)',
                      required=True)
@@ -51,9 +71,11 @@ def parse_cmd() -> argparse.Namespace:
                      default="",
                      help='A file containing accessions to download, 1 per line')
     add.add_argument('-t', '--tmp-directory',
-                     default=path.join(tempfile.gettempdir(), 'seqdd'),
+                     default=os.path.join(gettempdir(), 'seqdd'),
                      help='Temporary directory to store and organize the downloaded files')
-    add.add_argument('--unitigs', action='store_true', help='Download unitigs instead of contigs for logan accessions.')
+    add.add_argument('--unitigs',
+                     action='store_true',
+                     help='Download unitigs instead of contigs for logan accessions.')
 
     # Download entries from the register
     download = subparsers.add_parser('download',
@@ -64,10 +86,10 @@ def parse_cmd() -> argparse.Namespace:
                           default='data', help='Directory where all the data will be downloaded')
     download.add_argument('-p', '--max-processes',
                           type=int,
-                          default=8,
-                          help='Maximum number of processes to run in parallel.')
+                          default=threads_available() // 2,
+                          help='Number of processes to run in parallel.')
     download.add_argument('-t', '--tmp-directory',
-                          default='/tmp/seqdd',
+                          default=os.path.join(gettempdir(), 'seqdd'),
                           help='Temporary directory to store and organize the downloaded files')
     download.add_argument('--log-directory',
                           default='logs',
@@ -89,7 +111,7 @@ def parse_cmd() -> argparse.Namespace:
                                      '5 accessions are displayed per line (tabulation separated).',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     lst.add_argument('-s', '--source',
-                     choices=['ncbi', 'sra', 'url'],
+                     choices=data_sources,
                      help='List only the datasets from the given source. If not specified, list all the datasets.')
     lst.add_argument('-r', '--regular-expressions',
                      nargs='+',
@@ -101,13 +123,13 @@ def parse_cmd() -> argparse.Namespace:
                                    help='Remove dataset(s) from the register',
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     remove.add_argument('-s', '--source',
-                        choices=['ncbi', 'sra', 'url'],
+                        choices=data_sources,
                         help='Delete only from the given source. If not specified, removed from all the sources.')
     remove.add_argument('-a', '--accessions',
                         nargs='+',
                         help='List of accessions to remove from the register. '
                              'Each accession can be a regular expression.')
-    
+
     # Shared arguments
     for subparser in subparsers.choices.values():
         subparser.add_argument('--register-location',
@@ -123,6 +145,12 @@ def parse_cmd() -> argparse.Namespace:
 
 
 def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """
+    function corresponding to sub command `remove`
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
      # validate the regexps
     valid_regexp = []
     for regexp in args.accessions:
@@ -142,6 +170,12 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
 
 
 def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """
+    function corresponding to 'list' sub command
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
     # validate the regexps
     valid_regexp = []
     for regexp in args.regular_expressions:
@@ -164,9 +198,19 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
 
 
 def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
+    """
+    function corresponding to 'init' sub command
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
     logger.info('Init register')
     location = args.register_location
-    register = create_register(location, logger, force=args.force)
+    try:
+        register = create_register(location, logger, force=args.force)
+    except FileExistsError as err:
+        sys.exit(str(err))
+
     if args.register_file is not None:
         register.load_from_file(args.register_file)
         register.save_to_dir(location)
@@ -174,9 +218,15 @@ def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
 
 
 def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
+    """
+    function corresponding to 'add' sub command
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
     # Getting the file to the sources
-    src_path = path.join(args.register_location, f"{args.source}.txt")
-    bin_dir = path.join(args.register_location, 'bin')
+    src_path = os.path.join(args.register_location, f"{args.source}.txt")
+    bin_dir = os.path.join(args.register_location, 'bin')
     # load the register
     src_mng = SourceManager(args.tmp_directory, bin_dir, logger)
     register = Register(logger, dirpath=args.register_location)
@@ -189,7 +239,7 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     new_accessions = set()
     if len(args.accessions) > 0:
         new_accessions.update(args.accessions)
-    if path.isfile(args.file_of_accessions):
+    if os.path.isfile(args.file_of_accessions):
         with open(args.file_of_accessions) as fr:
             new_accessions.update([x.strip() for x in fr if len(x.strip()) > 0])
 
@@ -198,18 +248,29 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     if args.unitigs:
         src_manip.set_option('unitigs', str(args.unitigs))
     valid_accessions = src_manip.filter_valid_accessions(frozenset(new_accessions))
-    
+
     # Add valid accessions
     accessions.update(valid_accessions)
     logger.info(f"{len(accessions) - size_before} accessions added to the register")
 
     # Save the register
     if len(accessions) > size_before:
-        save_source(src_path, accessions)
+        save_accesions_to_source(src_path, accessions)
 
 
 def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
-    bindir = path.join(args.register_location, 'bin')
+    """
+    function corresponding to 'download' sub command
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
+    max_threads_available = threads_available()
+    if args.max_processes > max_threads_available:
+        args.max_processes = max_threads_available
+        logger.warning(f"The maximal number of threads available is {max_threads_available} "
+                       f"set '--max-processes {max_threads_available}'.")
+    bindir = os.path.join(args.register_location, 'bin')
     src_manager = SourceManager(args.tmp_directory, bindir, logger)
     reg = Register(logger, dirpath=args.register_location)
     dm = DownloadManager(reg, src_manager, logger, bindir, args.tmp_directory)
@@ -217,25 +278,26 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
 
 
 def on_export(args: argparse.Namespace, logger:logging.Logger) -> None:
+    """
+    function corresponding to 'export' sub command
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
     reg = Register(logger, dirpath=args.register_location)
     reg.save_to_file(args.output_register)
     logger.info(f"Register exported to {args.output_register}")
 
 
 def main() -> None:
+    """
+    main entry point to seqdd
+    """
     # Platform check
     system = platform.system()
     if system == 'Windows':
-        print('Windows plateforms are not supported by seqdd.', file=stderr)
+        print('Windows plateforms are not supported by seqdd.', file=sys.stderr)
         exit(3)
-
-    args = parse_cmd()
-
-    # Verify the existance of the data register
-    if args.cmd != 'init':
-        if not path.isdir(args.register_location):
-            print('No data register found. Please first run the init command.', file=stderr)
-            exit(1)
 
     # Setup the logger
     logger = logging.getLogger('seqdd')
@@ -245,6 +307,13 @@ def main() -> None:
     formatter = logging.Formatter('[%(asctime)s - %(levelname)s] %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    args = parse_cmd(logger)
+
+    # Verify the existence of the data register
+    if args.cmd != 'init':
+        if not os.path.isdir(args.register_location):
+            print('No data register found. Please first run the init command.', file=sys.stderr)
+            exit(1)
 
     # Apply the right command
     cmd_to_apply = globals()[f"on_{args.cmd}"]

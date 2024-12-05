@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ErrorDetails>
+  <timestamp>1732876814771</timestamp>
+  <status>400</status>
+  <error>Bad Request</error>
+  <message>Unknown accession format:GCA_00000000.BAD.</message>
+  <path>/ena/browser/api/xml/GCA_00000000.BAD</path>
+</ErrorDetails>
