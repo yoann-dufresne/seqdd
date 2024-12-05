@@ -1,8 +1,53 @@
-**/__pycache__
 data/
+!/tests/data
 logs/
-tmp/
+tmp
+
+##################################
+# seqdd generated files and dirs #
+##################################
 .register/
 **/*.reg
+!/tests/data/*.reg
 
+
+##########################
+# Python complied source #
+##########################
+*\.pyc
+*\.pyo
+**/__pycache__
+build/
+dist/
+doc/_build/
+seq.egg-info/
+
+
+#################
+# editors files #
+#################
+# pychram
+\.idea 
+# vscode
 .vscode/
+# vim 
+*\.swp
+*~
+\#*\#
+
+#########################
+# coverage chache files #
+#########################
+\.coverage
+htmlcov/
+
+######################
+# Logs and databases #
+######################
+*\.log
+.DS_Store
+
+########
+# ruff #
+########
+.ruff_cache/

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ErrorDetails>
+  <timestamp>1732893043100</timestamp>
+  <status>404</status>
+  <error>Not Found</error>
+  <message>GCA_00000000.99 not found.</message>
+  <path>/ena/browser/api/xml/GCA_00000000.99</path>
+</ErrorDetails>

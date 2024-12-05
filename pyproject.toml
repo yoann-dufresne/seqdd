@@ -1,11 +1,13 @@
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
 [project]
 name = "seqdd"
 version = "0.0"
 authors = [
   { name="Yoann Dufresne", email="yoann.dufresne@pasteur.fr" },
+  { name="Bertrand Néron", email="bertrand.neron@pasteur.fr" },
 ]
 description = "A package to share andd download a biological sequence dataset using register files. It's goal is to simplify the download process while improving the reproducibility."
 readme = "README.md"
@@ -20,9 +22,50 @@ classifiers = [
     "Development Status :: 3 - Alpha"
 ]
 
+[project.optional-dependencies]
+dev = [
+    'sphinx',
+    'sphinx_rtd_theme',
+    'sphinx-autodoc-typehints',
+    'coverage',
+    'ruff'
+]
+
 [project.urls]
 Homepage = "https://github.com/yoann-dufresne/seqdd"
 Issues = "https://github.com/yoann-dufresne/seqdd/issues"
 
 [project.scripts]
 seqdd = "seqdd.__main__:main"
+
+
+[tool.coverage.run]
+branch = true
+source = ["seqdd"]
+command_line = "-m unittest discover -vv -s tests"
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".eggs",
+    ".git",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
+]
+
+# Same as Black.
+line-length = 120
+indent-width = 4
+
+src = ['seqdd', 'tests']
+[tool.ruff.format]
+indent-style = "space"

@@ -7,15 +7,10 @@ import time
 from seqdd.utils.scheduler import Job
 from seqdd.register.sources.ena import ENA
 
-
-naming = {
-    'name': 'Read Archives (SRA/ENA/DDBJ)',
-    'key': 'reads',
-    'classname': 'ReadArchives',
-}
+from . import DataType
 
 
-class ReadArchives:
+class ReadArchives(DataType):
     """
     The Logan class represents a data downloader for the Assemblies made on top of SRA.
 

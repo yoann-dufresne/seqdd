@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ErrorDetails>
+  <timestamp>1733215399814</timestamp>
+  <status>400</status>
+  <error>Bad Request</error>
+  <message>Unknown accession format:ERR00001.BAD.</message>
+  <path>/ena/browser/api/xml/ERR00001.BAD</path>
+</ErrorDetails>

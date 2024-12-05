@@ -1,0 +1,61 @@
+<RUN_SET>
+<RUN accession="ERR3258091" alias="E-MTAB-7830:LTBI_moz_117" broker_name="ArrayExpress" center_name="European Bioinformatics Institute" run_center="Unidade de Xenomica-CACTI-University of Vigo ">
+  <IDENTIFIERS>
+    <PRIMARY_ID>ERR3258091</PRIMARY_ID>
+    <SUBMITTER_ID namespace="European Bioinformatics Institute">E-MTAB-7830:LTBI_moz_117</SUBMITTER_ID>
+  </IDENTIFIERS>
+  <TITLE>Ion Torrent Proton sequencing; RNA-seq of Human Tuberculosis (TB) in active TB patients, contacts with latent infection and uninfected contacts</TITLE>
+  <EXPERIMENT_REF accession="ERX3284819">
+    <IDENTIFIERS>
+      <PRIMARY_ID>ERX3284819</PRIMARY_ID>
+    </IDENTIFIERS>
+  </EXPERIMENT_REF>
+  <DATA_BLOCK>
+    <FILES>
+      <FILE ascii_offset="!" checksum="148ddc24a943fef195567f8b9c6ba4b5" checksum_method="MD5" filename="run/ERR325/ERR3258091/EMITB_oem_2019_Sample_117Mz.fastq.gz" filetype="fastq" quality_encoding="ascii" quality_scoring_system="phred"/>
+    </FILES>
+  </DATA_BLOCK>
+  <RUN_LINKS>
+    <RUN_LINK>
+      <XREF_LINK>
+        <DB>ENA-SUBMISSION</DB>
+        <ID>ERA1806456</ID>
+      </XREF_LINK>
+    </RUN_LINK>
+    <RUN_LINK>
+      <XREF_LINK>
+        <DB>ENA-STUDY</DB>
+        <ID>ERP114593</ID>
+      </XREF_LINK>
+    </RUN_LINK>
+    <RUN_LINK>
+      <XREF_LINK>
+        <DB>ENA-SAMPLE</DB>
+        <ID>ERS3348210</ID>
+      </XREF_LINK>
+    </RUN_LINK>
+    <RUN_LINK>
+      <XREF_LINK>
+        <DB>ENA-FASTQ-FILES</DB>
+        <ID><![CDATA[https://www.ebi.ac.uk/ena/portal/api/filereport?accession=ERR00003.BAD&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes]]></ID>
+      </XREF_LINK>
+    </RUN_LINK>
+    <RUN_LINK>
+      <XREF_LINK>
+        <DB>ENA-SUBMITTED-FILES</DB>
+        <ID><![CDATA[https://www.ebi.ac.uk/ena/portal/api/filereport?accession=ERR00003.BAD&result=read_run&fields=run_accession,submitted_ftp,submitted_md5,submitted_bytes,submitted_format]]></ID>
+      </XREF_LINK>
+    </RUN_LINK>
+  </RUN_LINKS>
+  <RUN_ATTRIBUTES>
+    <RUN_ATTRIBUTE>
+      <TAG>ENA-FIRST-PUBLIC</TAG>
+      <VALUE>2020-07-01</VALUE>
+    </RUN_ATTRIBUTE>
+    <RUN_ATTRIBUTE>
+      <TAG>ENA-LAST-UPDATE</TAG>
+      <VALUE>2019-04-04</VALUE>
+    </RUN_ATTRIBUTE>
+  </RUN_ATTRIBUTES>
+</RUN>
+</RUN_SET>
