@@ -59,7 +59,7 @@ class Register:
             # Is the subregister exists ?
             if path.exists(src_path):
                 # Load a subregister from its file
-                self.acc_by_src[key].update(load_source(src_path))
+                self.acc_by_src[key].update(get_accessions_from_source(src_path))
 
         self.logger.debug(f'Register loaded from {dirpath}')
         return True
@@ -81,7 +81,7 @@ class Register:
             src_path = path.join(dirpath, f"{key}.txt")
             if len(self.acc_by_src[key]) > 0:
                 # Save a subregister to its file
-                save_source(src_path, self.acc_by_src[key])
+                save_accesions_to_source(src_path, self.acc_by_src[key])
             elif path.exists(src_path):
                 # Remove the file if the subregister is empty
                 remove(src_path)
@@ -195,8 +195,9 @@ class Register:
 
 # --- Register files load/save ---
 
-def load_source(sourcepath: str) -> set[str]:
+def get_accessions_from_source(sourcepath: str) -> set[str]:
     """
+    read the file corresponding to sourcepatth and get the accesions
 
     :param sourcepath: The path of this register corresponding a source
     :return: set of accession describe in the sourcepath
@@ -215,9 +216,9 @@ def load_source(sourcepath: str) -> set[str]:
     return accessions
 
 
-def save_source(sourcepath: str, accessions: Iterable[str]) -> None:
+def save_accesions_to_source(sourcepath: str, accessions: Iterable[str]) -> None:
     """
-
+    write accessions to source corresponding to sourcepath. *Warning* if source path exist overwrite it.
     :param sourcepath: The path of this register corresponding a source
     :param accessions: The list of accessions to write in sourcepath
     """
@@ -240,8 +241,9 @@ def create_register(dirpath: str, logger: logging.Logger, force: bool = False) -
 
     # Already existing register ?
     if path.exists(dirpath):
-        logger.critical(f"A register is already present at location {dirpath}")
-        exit(1)
+        msg = f"A register is already present at location {dirpath}"
+        logger.critical(msg)
+        raise FileExistsError(msg) from None
 
     # Creates the directory if needed
     makedirs(dirpath, exist_ok=True)

@@ -3,10 +3,10 @@ import os
 import platform
 import re
 import logging
-from sys import stderr
+import sys
 from tempfile import gettempdir
 
-from .register.reg_manager import save_source, create_register, Register
+from .register.reg_manager import save_accesions_to_source, create_register, Register
 from .register.src_manager import DataSourceLoader, SourceManager
 from .utils.download import DownloadManager
 
@@ -206,7 +206,11 @@ def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     logger.info('Init register')
     location = args.register_location
-    register = create_register(location, logger, force=args.force)
+    try:
+        register = create_register(location, logger, force=args.force)
+    except FileExistsError as err:
+        sys.exit(str(err))
+
     if args.register_file is not None:
         register.load_from_file(args.register_file)
         register.save_to_dir(location)
@@ -251,7 +255,7 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
 
     # Save the register
     if len(accessions) > size_before:
-        save_source(src_path, accessions)
+        save_accesions_to_source(src_path, accessions)
 
 
 def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -292,7 +296,7 @@ def main() -> None:
     # Platform check
     system = platform.system()
     if system == 'Windows':
-        print('Windows plateforms are not supported by seqdd.', file=stderr)
+        print('Windows plateforms are not supported by seqdd.', file=sys.stderr)
         exit(3)
 
     # Setup the logger
@@ -308,7 +312,7 @@ def main() -> None:
     # Verify the existence of the data register
     if args.cmd != 'init':
         if not os.path.isdir(args.register_location):
-            print('No data register found. Please first run the init command.', file=stderr)
+            print('No data register found. Please first run the init command.', file=sys.stderr)
             exit(1)
 
     # Apply the right command
