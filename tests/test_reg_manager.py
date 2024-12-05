@@ -3,7 +3,7 @@ import tempfile
 import os
 
 from tests import SeqddTest
-from seqdd.register.reg_manager import Register
+from seqdd.register.reg_manager import Register, get_accessions_from_source, save_accesions_to_source, create_register
 from seqdd.register.src_manager import DataSourceLoader
 
 class TestRegister(SeqddTest):
@@ -327,3 +327,63 @@ ENA_000001"""
 
         reg_saved = Register(self.logger, dirpath=new_register_path)
         self.assertDictEqual(reg.acc_by_src, reg_saved.acc_by_src)
+
+
+class TestSrcRegister(SeqddTest):
+
+
+    @classmethod
+    def setUpClass(cls):
+        cls.logger = logging.getLogger('seqdd')
+        cls.cwd = os.getcwd()
+        cls.data_sources = DataSourceLoader().keys()
+
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory(prefix='seqdd-')
+        os.chdir(self._tmp_dir.name)
+
+
+    def tearDown(self):
+        self._tmp_dir.cleanup()
+        os.chdir(self.cwd)
+
+
+    def test_get_accessions_from_source(self):
+        src_path = 'ena.txt'
+        src = get_accessions_from_source(src_path)
+        self.assertSetEqual(src, set())
+
+        accs = {'ACC00001', 'ACC00002'}
+        with open(src_path, 'w') as f:
+            f.write('\n'.join(accs))
+            f.write('\n')
+
+        src = get_accessions_from_source(src_path)
+        self.assertSetEqual(src, accs)
+
+
+    def test_save_accessions_to_source(self):
+        src_path = 'ena.txt'
+        accs = {'ACC00001', 'ACC00002'}
+        save_accesions_to_source(src_path, accs)
+        src = get_accessions_from_source(src_path)
+        self.assertSetEqual(src, accs)
+
+
+    def test_create_register(self):
+        dir_path = os.path.join('level1', 'register')
+        create_register(dir_path, logger=self.logger)
+        self.assertTrue(os.path.isdir(dir_path))
+
+        with self.catch_log() as log:
+            with self.assertRaises(FileExistsError) as err:
+                create_register(dir_path, logger=self.logger)
+            log_msg = log.get_value().rstrip()
+        exp_msg = f"A register is already present at location {dir_path}"
+        self.assertEqual(str(err.exception),
+                         exp_msg)
+        self.assertEqual(log_msg,
+                         exp_msg)
+
+        create_register(dir_path, logger=self.logger, force=True)
+        self.assertTrue(os.path.isdir(dir_path))
