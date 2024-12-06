@@ -37,9 +37,8 @@ class TestRegister(SeqddTest):
                              {ds: set() for ds in self.data_sources})
 
         reg = Register(self.logger, regfile=self.find_data('register.reg'))
-        reg_file = {'ena': {'ENA_000001'},
-                    'sra': {'SRA000001'},
-                    'ncbi': {'GCA_000001', 'GCA_000002'}}
+        reg_file = {'readarchives': set(['ENA_000001', 'SRA000001', 'GCA_000002']),
+                    'logan': set(['SRR6246166_contigs'])}
         for ds in self.data_sources:
             with self.subTest(data_source=ds):
                 accs = reg.acc_by_src[ds]
@@ -84,9 +83,8 @@ class TestRegister(SeqddTest):
         register_name = 'register.reg'
         reg = Register(self.logger)
         reg.load_from_file(self.find_data(register_name))
-        reg_file = {'ena': {'ENA_000001'},
-                    'sra': {'SRA000001'},
-                    'ncbi': {'GCA_000001', 'GCA_000002'}}
+        reg_file = {'readarchives': {'ENA_000001', 'SRA000001', 'GCA_000002'},
+                    'logan': {'SRR6246166_contigs'}}
         for ds in self.data_sources:
             with self.subTest(data_source=ds):
                 accs = reg.acc_by_src[ds]
@@ -98,13 +96,12 @@ class TestRegister(SeqddTest):
 
     def test_load_from_file_bad_header(self):
         register_name = 'register.reg'
-        no_header_reg_file = """sra\t1
-SRA000001
-ncbi\t2
-GCA_000001
-GCA_000002
-ena\t1
-ENA_000001"""
+        no_header_reg_file = """readarchives\t3
+            SRA000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         register_path = os.path.join(self._tmp_dir.name, register_name)
         with open(register_path, 'w') as f:
             f.write(no_header_reg_file)
@@ -122,13 +119,12 @@ ENA_000001"""
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         bad_major_reg_file = """version 1.0
-sra\t1
-SRA000001
-ncbi\t2
-GCA_000001
-GCA_000002
-ena\t1
-ENA_000001"""
+            readarchives\t3
+            SRA000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(bad_major_reg_file)
 
@@ -146,13 +142,12 @@ ENA_000001"""
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         bad_major_reg_file = """version 0.5
-    sra\t1
-    SRA000001
-    ncbi\t2
-    GCA_000001
-    GCA_000002
-    ena\t1
-    ENA_000001"""
+            readarchives\t3
+            SRA000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(bad_major_reg_file)
 
@@ -170,13 +165,12 @@ ENA_000001"""
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         bad_major_reg_file = """version 0.5
-    sra\t1
-    SRA000001
-    ncbi\t2
-    GCA_000001
-    GCA_000002
-    ena\t1
-    ENA_000001"""
+            readarchives\t3
+            SRA000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(bad_major_reg_file)
 
@@ -190,12 +184,11 @@ ENA_000001"""
                 Register.minor_version = 0
                 self.logger.setLevel(level)
             log_msg = log.get_value().rstrip()
+        
         self.assertDictEqual(reg.acc_by_src,
-                             {'sra': {'SRA000001'},
-                                 'ncbi': {'GCA_000001','GCA_000002'},
-                                 'ena' : {'ENA_000001'},
-                                 'logan': set(),
-                                 'url': set()
+                             {'readarchives': {'SRA000001', 'GCA_000002', 'ENA_000001'},
+                                'logan': {'SRR6246166_contigs'},
+                                'url': set()
                               })
         self.assertEqual(log_msg, f'Data from {register_path} successfully loaded')
 
@@ -210,49 +203,49 @@ ENA_000001"""
 
         acc = 'nimportnaoik'
         with self.catch_log() as log:
-            reg.remove_accession('sra', acc)
+            reg.remove_accession('readarchives', acc)
             log_msg = log.get_value().rstrip()
-        self.assertEqual(log_msg, f'Accession {acc} not found in sra')
+        self.assertEqual(log_msg, f'Accession {acc} not found in readarchives')
 
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         reg_file = """version 0.0
-    sra\t1
-    SRA000001
-    ncbi\t2
-    GCA_000001
-    GCA_000002
-    ena\t1
-    ENA_000001"""
+            readarchives\t4
+            SRA000001
+            GCA_000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(reg_file)
         reg = Register(self.logger, regfile=register_path)
-        ds = 'ncbi'
+        ds = 'readarchives'
         acc = 'GCA_000001'
-        self.assertSetEqual(reg.acc_by_src[ds], {'GCA_000001', 'GCA_000002'})
+        self.assertSetEqual(reg.acc_by_src[ds], {'SRA000001', 'GCA_000001', 'GCA_000002', 'ENA_000001'})
         reg.remove_accession(ds, acc)
-        self.assertSetEqual(reg.acc_by_src[ds], {'GCA_000002'})
+        self.assertSetEqual(reg.acc_by_src[ds], {'SRA000001', 'GCA_000002', 'ENA_000001'})
 
 
     def test_filter_accessions(self):
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         reg_file = """version 0.0
-    sra\t1
-    SRA000001
-    ncbi\t2
-    GCA_000001
-    GCA_000002
-    ena\t1
-    ENA_000001"""
+            readarchives\t4
+            SRA000001
+            GCA_000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(reg_file)
         reg = Register(self.logger, regfile=register_path)
-        accs = reg.filter_accessions('ncbi', ['^GCA'])
+        accs = reg.filter_accessions('readarchives', ['^GCA'])
         self.assertListEqual(['GCA_000001', 'GCA_000002'], sorted(accs))
-        accs = reg.filter_accessions('ncbi', ['.*01$'])
-        self.assertListEqual(['GCA_000001'], accs)
-        accs = reg.filter_accessions('ncbi', ['02$', '^GCA'])
+        accs = reg.filter_accessions('readarchives', ['.*01$'])
+        self.assertListEqual(['ENA_000001', 'GCA_000001', 'SRA000001'], sorted(accs))
+        accs = reg.filter_accessions('readarchives', ['02$', '^GCA'])
         # filter_accessions use match so 02$ does not match any acc
         # the 2 acc match the '^GCA' patten
         self.assertListEqual(['GCA_000001', 'GCA_000002'], sorted(accs))
@@ -268,13 +261,12 @@ ENA_000001"""
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         reg_file = """version 0.0
-    sra\t1
-    SRA000001
-    ncbi\t2
-    GCA_000001
-    GCA_000002
-    ena\t1
-    ENA_000001"""
+            readarchives\t3
+            SRA000001
+            GCA_000002
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(reg_file)
         reg = Register(self.logger, regfile=register_path)
@@ -290,13 +282,12 @@ ENA_000001"""
         register_name = 'register.reg'
         register_path = os.path.join(self._tmp_dir.name, register_name)
         reg_file = """version 0.0
-            sra\t1
+            readarchives\t3
             SRA000001
-            ncbi\t2
-            GCA_000001
             GCA_000002
-            ena\t1
-            ENA_000001"""
+            ENA_000001
+            logan\t1
+            SRR6246166_contigs"""
         with open(register_path, 'w') as f:
             f.write(reg_file)
         reg = Register(self.logger, regfile=register_path)
@@ -349,7 +340,7 @@ class TestSrcRegister(SeqddTest):
 
 
     def test_get_accessions_from_source(self):
-        src_path = 'ena.txt'
+        src_path = 'readarchives.txt'
         src = get_accessions_from_source(src_path)
         self.assertSetEqual(src, set())
 
@@ -363,7 +354,7 @@ class TestSrcRegister(SeqddTest):
 
 
     def test_save_accessions_to_source(self):
-        src_path = 'ena.txt'
+        src_path = 'readarchives.txt'
         accs = {'ACC00001', 'ACC00002'}
         save_accesions_to_source(src_path, accs)
         src = get_accessions_from_source(src_path)

@@ -1,8 +1,7 @@
 version 0.0
-sra	1
+readarchives	3
 SRA000001
-ncbi	2
-GCA_000001
 GCA_000002
-ena	1
 ENA_000001
+logan	1
+SRR6246166_contigs
