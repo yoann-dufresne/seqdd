@@ -115,6 +115,7 @@ class DataSourceLoader:
 
         # Dynamically load each sub module and add them to a list
         loaded_sources = [importlib.import_module(f"{self._src_module_name}.{submodule}") for submodule in submodules]
+
         return loaded_sources
 
 
@@ -136,7 +137,8 @@ class DataSourceLoader:
         for module in src_modules:
             for _, kl in inspect.getmembers(module, inspect.isclass):
                 if is_data_source(kl):
-                    klasses.add(kl)
-                    continue
+                    if kl.__module__ == module.__name__:
+                        klasses.add(kl)
+                        continue
 
         return klasses
