@@ -1,7 +1,5 @@
 import logging
-from os import path
 import re
-from shutil import move
 import time
 
 from seqdd.utils.scheduler import Job
