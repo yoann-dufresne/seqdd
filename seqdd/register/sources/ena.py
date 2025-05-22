@@ -5,13 +5,13 @@ from shutil import rmtree, move
 import subprocess
 import time
 
-from ..data_type import DataType
+from .sources import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from ...errors import DownloadError
 
 
 
-class ENA(DataType):
+class ENA(DataSource):
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
     """
@@ -22,7 +22,8 @@ class ENA(DataType):
         'Sample': r'(E|D|S)RS[0-9]{6,}|SAM(E|D|N)[A-Z]?[0-9]+',
         'Run': r'(E|D|S)RR[0-9]{6,}',
         'Experiment': r'(E|D|S)RX[0-9]{6,}',
-        'Assembly': r'GCA_[0-9]{9}\.[0-9]+', #
+        'Assembly': r'GCA_[0-9]{9}\.[0-9]+', # Assembly
+        'Reference': r'GCF_[0-9]{9}\.[0-9]+', # Currated ref assembly
         'Submission': r'(E|D|S)RA[0-9]{6,}'
     }
 
@@ -36,38 +37,6 @@ class ENA(DataType):
         :param logger: The logger object.
         """
         super().__init__(tmpdir, bindir, logger, min_delay=0.35)
-
-
-    
-    def ena_delay_ready(self) -> bool :
-        """
-        Checks if the minimum delay between ENA queries has passed.
-
-        :returns: True if the minimum delay has passed, False otherwise.
-        """
-        # Minimal delay between SRA queries (0.5s)
-        locked = self.mutex.acquire(blocking=False)
-        ready = False
-        if locked:
-            ready = time.time() - self.last_query > self.min_delay
-            if ready:
-                self.last_query = time.time()
-            self.mutex.release()
-        return ready
-
-
-    def wait_my_turn(self) -> None:
-        """
-        Waits for the minimum delay between ENA queries.
-
-        .. _warning:
-
-            The function acquires the mutex lock. You must release it after using this function.
-
-        """
-        while not self.ena_delay_ready():
-            time.sleep(0.01)
-        self.mutex.acquire()
 
 
     # --- ENA Job creations ---
@@ -101,7 +70,7 @@ class ENA(DataType):
             makedirs(tmp_dir)
 
             # Check if the accession is an assembly and create jobs accordingly
-            if acc.startswith('GCA'):
+            if acc.startswith('GCA') or acc.startswith('GCF'):
                 jobs_from_assembly = self.jobs_from_assembly(acc, tmp_dir, datadir, job_name)
                 jobs.extend(jobs_from_assembly)
                 continue
@@ -122,7 +91,7 @@ class ENA(DataType):
                 # Create the command line job
                 curl_jobs.append(CmdLineJob(
                     command_line=f'curl -s -o {output_file} "{url}"',
-                    can_start = self.ena_delay_ready,
+                    can_start = self.source_delay_ready,
                     name=f'{job_name}_{filename}'
                 ))
             jobs.extend(curl_jobs)
@@ -157,7 +126,7 @@ class ENA(DataType):
         # Create the command line job
         curl_job = CmdLineJob(
             command_line=f'curl -o {output_file} "{url}"',
-            can_start=self.ena_delay_ready,
+            can_start=self.source_delay_ready,
             name=f'{job_name}_{assembly}_download'
         )
         # Create a compression job
@@ -264,15 +233,14 @@ class ENA(DataType):
             try:
                 response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
             except subprocess.TimeoutExpired:
+                self.end_my_turn()
                 self.logger.error(f'Timeout querying ENA\nQuery: {query}')
                 continue
+            self.end_my_turn()
 
             if response.returncode != 0:
                 self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
                 continue
-            # Update the last query time
-            self.last_query = time.time()
-            self.mutex.release()
 
             # Parse the response
             response = response.stdout.decode()
@@ -316,9 +284,8 @@ class ENA(DataType):
         query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accession}?download=false&gzip=false&includeLinks=false'
         self.wait_my_turn()
         response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # Update the last query time
-        self.last_query = time.time()
-        self.mutex.release()
+        self.end_my_turn()
+
         # Check if the query was successful
         if response.returncode != 0:
             self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
@@ -336,10 +303,8 @@ class ENA(DataType):
         fastq_url = match.group(1)
         self.wait_my_turn()
         response = subprocess.run(['curl', fastq_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.end_my_turn()
 
-        # Update the last query time
-        self.last_query = time.time()
-        self.mutex.release()
         # Check if the query was successful
         if response.returncode != 0:
             self.logger.error(f'Error querying ENA\nQuery: {fastq_url}\nAnswer: {response.stderr.decode()}')
