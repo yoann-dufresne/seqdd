@@ -5,7 +5,7 @@ from shutil import rmtree, move
 import subprocess
 import time
 
-from .sources import DataSource
+from sources import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from ...errors import DownloadError
 
