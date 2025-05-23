@@ -2,6 +2,7 @@ import logging
 import abc
 from threading import Lock
 from ...utils.scheduler import Job
+import time
 
 
 class DataSource(metaclass=abc.ABCMeta):
