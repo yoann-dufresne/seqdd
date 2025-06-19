@@ -5,11 +5,12 @@ import time
 from os import listdir, makedirs, path
 from shutil import rmtree, move
 
-from ...utils.scheduler import Job, CmdLineJob, FunctionJob
-from . import DataType
+from seqdd.register.data_type import DataContainer
+from seqdd.utils.scheduler import Job, FunctionJob
+from seqdd.register.sources.url_server import UrlServer
 
 
-class Logan(DataType):
+class Logan(DataContainer):
     """
     The Logan class represents a data downloader for the Assemblies made on top of SRA.
     """
@@ -17,17 +18,11 @@ class Logan(DataType):
     # 'SRR[0-9]{6,}'
 
 
-    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, unitigs: bool = False) -> None:
+    def __init__(self, source: UrlServer, unitigs: bool = False) -> None:
         """
-        Initialize the ENA downloader object.
-
-        :param tmpdir: The temporary directory path.
-        :param bindir: The binary directory path.
-        :param logger: The logger object.
-        :param unitigs:
         """
-        super().__init__(tmpdir, bindir, logger, min_delay=0.35)
-
+        super().__init__(source)
+        self.source.set_delay(.35)
         self.unitigs = unitigs
 
 
@@ -42,47 +37,16 @@ class Logan(DataType):
             self.unitigs = value == 'True'
         else:
             self.logger.warning(f'Unknown option: {option}')
-    
-    def logan_delay_ready(self) -> bool :
-        """
-        Checks if the minimum delay between queries has passed.
 
-        :return: True if the minimum delay has passed, False otherwise.
-        """
-        # Minimal delay between Logan queries (0.35s)
-        locked = self.mutex.acquire(blocking=False)
-        ready = False
-        if locked:
-            ready = time.time() - self.last_query > self.min_delay
-            if ready:
-                self.last_query = time.time()
-            self.mutex.release()
-        return ready
-
-
-    def wait_my_turn(self) -> None:
-        """
-        Waits for the minimum delay between ENA queries.
-
-        .. warning:: The function acquires the mutex lock. You must release it after using this function.
-
-        """
-        while not self.logan_delay_ready():
-            time.sleep(0.01)
-        self.mutex.acquire()
-
-
-    # --- ENA Job creations ---
-
-    def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
+    def get_download_jobs(self, datadir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing Logan datasets.
 
-        :param accessions: A list of Logan/SRA accessions.
         :param datadir: The output directory path.
         :return: A list of jobs for downloading and processing Logan datasets.
         """
         jobs = []
+        accessions = self.data
 
         # Checking already downloaded accessions
         downloaded_accessions = frozenset(listdir(datadir))
@@ -118,17 +82,18 @@ class Logan(DataType):
             # Create the output file path
             output_file = path.join(tmp_dir, filename)
             # Create the command line job
-            jobs.append(CmdLineJob(
-                command_line=f'curl -s -o {output_file} "{url}"',
-                can_start = self.logan_delay_ready,
-                name=f'{job_name}_download'
-            ))
+            url_jobs = self.source.jobs_from_accessions([url], tmp_dir)
+            for job in url_jobs:
+                if job.name.startswith('url_'):
+                    # Rename the job to the accession name
+                    job.name = f'{job_name}_download'
+            jobs.extend(url_jobs)
 
             # Create a function job to move the files to the final directory
             jobs.append(FunctionJob(
                 func_to_run = self.move_and_clean,
                 func_args = (tmp_dir, datadir),
-                parents = [jobs[-1]],
+                parents = url_jobs,
                 name=f'{job_name}_move'
             ))
 
@@ -170,15 +135,12 @@ class Logan(DataType):
                 url = f'https://s3.amazonaws.com/logan-pub/u/{acc}/{acc}.unitigs.fa.zst'
             else:
                 url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{acc}.contigs.fa.zst'
-            response = subprocess.run(['curl', '-I', url], capture_output=True)
-            if response.returncode != 0:
-                self.logger.error(f'Error querying Logan/SRA\nQuery: {url}\nAnswer: {response.stderr.decode()}')
-                continue
-            elif not response.stdout.decode().startswith('HTTP/1.1 200'):
-                self.logger.warning(f'Contigs of the accession not found on the Amazon S3 bucket: {acc}')
-                continue
-
-            acc = f"{acc}_{'unitigs' if self.unitigs else 'contigs'}"
-            valid_accessions.append(acc)
+            
+            is_valid = len(self.url_server.filter_valid([url])) == 1
+            if not is_valid:
+                self.logger.warning(f'Invalid Logan/SRA accession: {acc}')
+            else:
+                acc = f"{acc}_{'unitigs' if self.unitigs else 'contigs'}"
+                valid_accessions.append(acc)
 
         return valid_accessions

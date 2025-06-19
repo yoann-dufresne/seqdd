@@ -3,17 +3,23 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from collections.abc import KeysView
-from types import ModuleType
-from typing import Type
 
-from .data_type import DataType
+from seqdd.register.data_type import DataContainer
+from seqdd.register.sources import DataSource
 
 
 class SourceManager:
     """
     Class to handle all kind of available source of data
     """
+
+    def get_sources() -> list[DataSource]:
+        """
+        Returns a list of all available data sources.
+
+        :returns: A list of DataSource instances.
+        """
+        return find_subclasses_in_package('seqdd.register.sources', DataSource)
 
 
     def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
@@ -23,122 +29,49 @@ class SourceManager:
         :param bindir: Where the helper binaries tools are stored.
         :param logger: The logger object for logging messages.
         """
-        available_data_sources = DataSourceLoader().items()
-        self.sources = {name: klass(tmpdir, bindir, logger) for name, klass in available_data_sources}
+        
+        data_containers = find_subclasses_in_package('seqdd.register.data_type', DataContainer)
+        data_sources = find_subclasses_in_package('seqdd.register.sources', DataSource)
+        print(f"Available data containers: {data_containers}")
+        print(f"Available data sources: {data_sources}")
+        
+        for data_container in data_containers:
+            source = get_declared_source_type(data_container)
+            print(f"Data container {data_container.__name__} is declared with source type: {source}")
 
 
-    def keys(self) -> KeysView[str]:
-        """
-        :return: the name of the available sources for instance 'ena', 'ncbi', ...
-        """
-        return self.sources.keys()
 
+def find_subclasses_in_package(package_name: str, base_class: type) -> list[type]:
+    subclasses = []
 
-    def get(self, source_name:str) -> Type[DataType] | None:
-        """
-        :param source_name: the name of the source
-        :return: The DataSource corresponding to the source_name or None if the source_name is not found.
-        """
-        return self.sources.get(source_name, None)
+    # Import the package (if not already imported)
+    package = importlib.import_module(package_name)
+    package_path = package.__path__
 
-
-class DataSourceLoader:
-    """
-    class to discover and download the DataSources
-
-    To be registered
-
-    1. The DataSource must be in a module in seqdd.register.data_sources
-    2. The class must inherit and implement :class:`seqdd.register.data_sources.DatSource` abstract class
-
-    """
-    _inst = None
-
-    def __new__(cls):
-        """
-        This class implement a Singleton pattern
-        """
-        if cls._inst is None:
-            cls._inst = super().__new__(cls)
-        return cls._inst
-
-
-    def __init__(self) -> None:
-        """Initialize a DataSourceLoader"""
-        self._src_module_name = 'seqdd.register.data_type'
-        self._data_sources = {klass.__name__.lower(): klass for klass in self._get_available_data_sources()}
-
-
-    def keys(self) -> list[str]:
-        """
-        :return: The list of the names of available data sources
-        """
-        return list(self._data_sources.keys())
-
-
-    def data_sources(self) -> list[Type[DataType]]:
-        """
-        :return: The list of data sources
-        """
-        return list(self._data_sources.values())
-
-
-    def __getitem__(self, ds_name) -> Type[DataType]:
-        """
-        :param ds_name: the name of the data source (in lower case)
-        :return: The corresponding class (not the object).
-        :raise KeyError: if the ds_name does not exists
-        """
+    # Parcours tous les sous-modules du package
+    for _, module_name, is_pkg in pkgutil.walk_packages(package_path, prefix=package_name + "."):
         try:
-            return self._data_sources[ds_name]
-        except KeyError:
-            raise KeyError(f"The data source {ds_name} does not exists. The available data source are: {self.keys()}")
+            module = importlib.import_module(module_name)
+        except Exception as e:
+            print(f"Erreur d'import pour {module_name}: {e}")
+            continue
+
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            # Vérifie si c'est une sous-classe de base_class, mais pas base_class elle-même
+            if issubclass(obj, base_class) and obj is not base_class:
+                subclasses.append(obj)
+
+    return subclasses
 
 
-    def items(self) -> list[tuple[str, Type[DataType]]]:
-        """
+from typing import get_type_hints
 
-        :return: The list of tuple data source name, DataSource
-        """
-        return list(self._data_sources.items())
-
-
-    def _list_and_load_sources(self) -> list[ModuleType]:
-        """
-        :return: The list of modules in sources package
-        """
-        # load the root data_source package
-        module = importlib.import_module(self._src_module_name)
-
-        # List all sub-modules
-        submodules = [name for _, name, _ in pkgutil.iter_modules(module.__path__)]
-
-        # Dynamically load each sub module and add them to a list
-        loaded_sources = [importlib.import_module(f"{self._src_module_name}.{submodule}") for submodule in submodules]
-
-        return loaded_sources
-
-
-    def _get_available_data_sources(self) -> set[Type[DataType]]:
-        """
-        dynamically load available data sources **class** (not instantiated)
-        a data source is:
-
-         * a Class which is in data_sources package
-         * This class must inherits from :class:`seqdd.register.data_sources.DatSource`
-         * This class must implement :class:`seqdd.register.data_sources.DatSource`
-
-        """
-        def is_data_source(ds):
-            return issubclass(ds, DataType) and not inspect.isabstract(ds)
-
-        src_modules = self._list_and_load_sources()
-        klasses = set()
-        for module in src_modules:
-            for _, kl in inspect.getmembers(module, inspect.isclass):
-                if is_data_source(kl):
-                    if kl.__module__ == module.__name__:
-                        klasses.add(kl)
-                        continue
-
-        return klasses
+def get_declared_source_type(cls):
+    while cls is not object:
+        try:
+            hints = get_type_hints(cls.__init__)
+            return hints.get('source')
+        except Exception:
+            pass
+        cls = cls.__base__
+    return None

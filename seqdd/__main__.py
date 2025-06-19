@@ -7,7 +7,7 @@ import sys
 from tempfile import gettempdir
 
 from .register.reg_manager import save_accesions_to_source, create_register, Register
-from .register.src_manager import DataSourceLoader, SourceManager
+from .register.src_manager import SourceManager
 from .utils.download import DownloadManager
 
 
@@ -32,7 +32,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     :param logger: The object to log message
     :returns: the command line argument and options parsed
     """
-    data_sources = DataSourceLoader().keys()
+    data_sources = [source.__name__ for source in SourceManager.get_sources()]
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',

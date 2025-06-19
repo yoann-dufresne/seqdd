@@ -3,9 +3,8 @@ from os import listdir, makedirs, path
 import re
 from shutil import rmtree, move
 import subprocess
-import time
 
-from sources import DataSource
+from seqdd.register.sources import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 from ...errors import DownloadError
 
