@@ -38,6 +38,16 @@ class DataSource(metaclass=abc.ABCMeta):
         :returns: A list of jobs for downloading and processing datasets.
         """
         pass
+    
+    
+    def set_delay(self, delay: float) -> None:
+        """
+        Sets the minimum delay between queries to the source.
+
+        :param delay: The minimum delay in seconds.
+        """
+        self.min_delay = delay
+        self.logger.info(f'Setting minimum delay to {self.min_delay} seconds')
 
 
     def source_delay_ready(self) -> bool :

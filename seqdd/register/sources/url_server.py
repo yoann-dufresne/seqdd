@@ -4,7 +4,7 @@ import subprocess
 import time
 from urllib.parse import urlparse
 from seqdd.utils.scheduler import CmdLineJob, Job
-from sources import DataSource
+from seqdd.register.sources import DataSource
 
 class UrlServer(DataSource):
     """
@@ -30,7 +30,7 @@ class UrlServer(DataSource):
             filepath = path.join(datadir, f'url{idx}_{filename}')
             job_name = f'url_{filename}'
 
-            jobs.append(CmdLineJob(f'curl -o {filepath} "{url}"', can_start=self.url_delay_ready, name=job_name))
+            jobs.append(CmdLineJob(f'curl -o {filepath} "{url}"', can_start=self.source_delay_ready, name=job_name))
 
         return jobs
 
@@ -42,11 +42,12 @@ class UrlServer(DataSource):
         :param url: The URL.
         :return: The filename extracted from the URL.
         """
-        while not self.url_delay_ready():
-            time.sleep(self.remaining_time_before_next_query())
+        self.wait_my_turn()
 
         verif_cmd = f'curl -X GET url -I "{url}"'
         res = subprocess.run(verif_cmd, shell=True, capture_output=True, text=True)
+        
+        self.end_my_turn()
 
         filename = None
         if res.returncode == 0:
@@ -64,4 +65,32 @@ class UrlServer(DataSource):
             filename = path.basename(url_parsed.path)
 
         return filename
+    
+    
+    def filter_valid(self, urls: list[str]) -> list[str]:
+        """
+        Filters the given list of urls and returns only the valid ones.
+
+        :param accessions: A list of URLs.
+        :return: A list of valid URLs.
+        """
+        valid_accessions = []
+
+        for url in urls:
+            # Check if the accession is valid
+            self.wait_my_turn()
+            response = subprocess.run(['curl', '-I', url], capture_output=True)
+            self.end_my_turn()
+            
+            # Check the response
+            if response.returncode != 0:
+                self.logger.error(f'Error querying: {url}\nAnswer: {response.stderr.decode()}')
+                continue
+            elif not response.stdout.decode().startswith('HTTP/1.1 200'):
+                self.logger.warning(f'Not found: {url}')
+                continue
+
+            valid_accessions.append(url)
+
+        return valid_accessions
 

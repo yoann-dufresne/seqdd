@@ -4,7 +4,7 @@ from shutil import rmtree
 from typing import Iterable
 import re
 
-from seqdd.register.src_manager import DataSourceLoader
+from seqdd.register.src_manager import SourceManager
 
 
 
@@ -33,7 +33,7 @@ class Register:
         self.logger = logger
 
         # Initialize the subregisters
-        self.acc_by_src = {k: set() for k in DataSourceLoader().keys()}
+        self.acc_by_src = {k: set() for k in [src.__name__ for src in SourceManager.get_sources()]}
 
         if dirpath is not None:
             self.load_from_dir(dirpath)
