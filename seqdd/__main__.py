@@ -139,7 +139,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
 
     args = parser.parse_args()
 
-    if args.cmd == 'add' and args.unitigs and args.source != 'logan':
+    if args.cmd == 'add' and args.unitigs and args.type != 'logan':
         parser.error('--unitigs is only available for Logan source')
 
     return args
@@ -162,7 +162,7 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.acc_by_src.keys() if args.source is None else [args.source]
+    src_names = reg.acc_by_src.keys() if args.type is None else [args.type]
     for name in src_names:
         acc_lst = reg.filter_accessions(name, valid_regexp)
         for acc in acc_lst:
@@ -187,7 +187,7 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.acc_by_src.keys() if args.source is None else args.source
+    src_names = reg.acc_by_src.keys() if args.type is None else args.type
     for name in src_names:
         acc_lst = reg.filter_accessions(name, valid_regexp)
 
