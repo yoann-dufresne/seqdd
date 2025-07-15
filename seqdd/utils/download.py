@@ -6,7 +6,7 @@ import time
 
 from seqdd.utils.scheduler import JobManager
 from ..register.reg_manager import Register
-from ..register.src_manager import SourceManager
+from ..register.datatype_manager import DataTypeManager
 
 # -------------------- Global download manager --------------------
 
@@ -15,8 +15,7 @@ class DownloadManager:
     Class to handle download from different source
     """
 
-    def __init__(self, register: Register, src_manager: SourceManager,
-                 logger: logging.Logger, bindir: str ='bin', tmpdir: str ='/tmp'):
+    def __init__(self, register: Register, datatype_manager: DataTypeManager):
         """
 
         :param register:
@@ -25,15 +24,18 @@ class DownloadManager:
         :param bindir: The binary directory path. Where the helper binaries tools are stored.
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
         """
+        # The sources register
         self.register = register
-        """The sources register"""
-        self.bin_dir = bindir
-        """The binary directory path. Where the helper binaries tools are stored."""
-        self.tmp_dir = tmpdir
-        """The temporary directory path. Where the downloaded intermediate files are located."""
-        self.logger = logger
-        """The logger object for logging messages."""
-        self.src_manager = src_manager
+        # The binary directory path. Where the helper binaries tools are stored.
+        self.bin_dir = datatype_manager.bindir
+        # The temporary directory path. Where the downloaded intermediate files are located.
+        self.tmp_dir = datatype_manager.tmpdir
+        # The logger object for logging messages.
+        self.logger = datatype_manager.logger
+        # The datatype manager to handle different data types
+        # This is used to get the source manager for each data type
+        # and to handle the download of datasets from different sources.
+        self.datatype_manager = datatype_manager
 
 
     def download_to(self, datadir, logdir, max_process=8) -> None:

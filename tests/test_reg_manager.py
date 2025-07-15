@@ -4,7 +4,7 @@ import os
 
 from tests import SeqddTest
 from seqdd.register.reg_manager import Register, get_accessions_from_source, save_accesions_to_source, create_register
-from seqdd.register.src_manager import DataSourceLoader
+from seqdd.register.datatype_manager import DataSourceLoader
 
 class TestRegister(SeqddTest):
 
