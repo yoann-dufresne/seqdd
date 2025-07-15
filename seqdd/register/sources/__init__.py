@@ -75,7 +75,7 @@ class DataSource(metaclass=abc.ABCMeta):
             mutex (Lock): A locked mutex that has to be released before the next query.
 
         """
-        while not self.ena_delay_ready():
+        while not self.source_delay_ready():
             time.sleep(0.01)
         self.mutex.acquire()
 

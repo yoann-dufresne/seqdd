@@ -7,7 +7,7 @@ import sys
 from tempfile import gettempdir
 
 from .register.reg_manager import save_accesions_to_source, create_register, Register
-from .register.src_manager import SourceManager
+from .register.datatype_manager import DataTypeManager
 from .utils.download import DownloadManager
 
 
@@ -32,7 +32,9 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     :param logger: The object to log message
     :returns: the command line argument and options parsed
     """
-    data_sources = [source.__name__ for source in SourceManager.get_sources()]
+    # Warning: Do not reuse this instance for sources. tmpdir and bindir are not properly setup at this point.
+    datatype_manager = DataTypeManager(logger)
+    data_types = datatype_manager.get_data_types().keys()
     parser = argparse.ArgumentParser(
                     prog='seqdd',
                     description='Prepare a sequence dataset, download it and export .reg files for reproducibility.',
@@ -58,10 +60,9 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     add = subparsers.add_parser('add',
                                 help='Add dataset(s) to manage',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    add.add_argument('-s', '--source',
-                     choices=data_sources,
-                     help='Download source. Can download from ncbi genomes, '
-                          'sra or an arbitrary url (uses wget to download)',
+    add.add_argument('-t', '--type',
+                     choices=data_types,
+                     help='Downloadable data type.',
                      required=True)
     add.add_argument('-a', '--accessions',
                      nargs='+',
@@ -70,7 +71,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     add.add_argument('-f', '--file-of-accessions',
                      default="",
                      help='A file containing accessions to download, 1 per line')
-    add.add_argument('-t', '--tmp-directory',
+    add.add_argument('--tmp-directory',
                      default=os.path.join(gettempdir(), 'seqdd'),
                      help='Temporary directory to store and organize the downloaded files')
     add.add_argument('--unitigs',
@@ -88,7 +89,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                           type=int,
                           default=threads_available() // 2,
                           help='Number of processes to run in parallel.')
-    download.add_argument('-t', '--tmp-directory',
+    download.add_argument('--tmp-directory',
                           default=os.path.join(gettempdir(), 'seqdd'),
                           help='Temporary directory to store and organize the downloaded files')
     download.add_argument('--log-directory',
@@ -110,9 +111,9 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                                      'Subregisters are listed one after the other. '
                                      '5 accessions are displayed per line (tabulation separated).',
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    lst.add_argument('-s', '--source',
-                     choices=data_sources,
-                     help='List only the datasets from the given source. If not specified, list all the datasets.')
+    lst.add_argument('-t', '--type',
+                     choices=data_types,
+                     help='List only the datasets from the given type. If not specified, list all the datasets.')
     lst.add_argument('-r', '--regular-expressions',
                      nargs='+',
                      default=[''],
@@ -122,9 +123,9 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     remove = subparsers.add_parser('remove',
                                    help='Remove dataset(s) from the register',
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    remove.add_argument('-s', '--source',
-                        choices=data_sources,
-                        help='Delete only from the given source. If not specified, removed from all the sources.')
+    remove.add_argument('-t', '--type',
+                        choices=data_types,
+                        help='Delete only from the given type. If not specified, removed from all the types.')
     remove.add_argument('-a', '--accessions',
                         nargs='+',
                         help='List of accessions to remove from the register. '
@@ -225,14 +226,13 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     :param logger: The object to log
     """
     # Getting the file to the sources
-    src_path = os.path.join(args.register_location, f"{args.source}.txt")
+    src_path = os.path.join(args.register_location, f"{args.type}.txt")
     bin_dir = os.path.join(args.register_location, 'bin')
     # load the register
-    src_mng = SourceManager(args.tmp_directory, bin_dir, logger)
     register = Register(logger, dirpath=args.register_location)
 
     # Load previous accession list
-    accessions = register.acc_by_src.get(args.source, set())
+    accessions = register.acc_by_src.get(args.type, set())
     size_before = len(accessions)
 
     # Get the new accessions
@@ -244,9 +244,12 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
             new_accessions.update([x.strip() for x in fr if len(x.strip()) > 0])
 
     # Verification of the accessions
-    src_manip = src_mng.sources[args.source]
+    datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
+    src_manip = datatype_manager.get_data_types()[args.type]
+    # TODO: Improve option handling
     if args.unitigs:
         src_manip.set_option('unitigs', str(args.unitigs))
+    # print(f"{args.type} => {src_manip}")
     valid_accessions = src_manip.filter_valid_accessions(frozenset(new_accessions))
 
     # Add valid accessions
@@ -271,9 +274,10 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.warning(f"The maximal number of threads available is {max_threads_available} "
                        f"set '--max-processes {max_threads_available}'.")
     bindir = os.path.join(args.register_location, 'bin')
-    src_manager = SourceManager(args.tmp_directory, bindir, logger)
+    datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
     reg = Register(logger, dirpath=args.register_location)
-    dm = DownloadManager(reg, src_manager, logger, bindir, args.tmp_directory)
+    dm = DownloadManager(reg, datatype_manager,
+                         logger, bindir, args.tmp_directory)
     dm.download_to(args.download_directory, args.log_directory , args.max_processes)
 
 
