@@ -46,13 +46,17 @@ class DataTypeManager:
         # debug
         # print(f"Available data containers: {data_container_classes}")
         
+        self._datasources = {}
         self._datatypes = {}
         # Loop to instantiate each data source linked to each data container
-        for data_container in data_container_classes:
-            # Detect the declared data source type of the data container
-            data_source = get_declared_source_type(data_container)
-            # Instanciate the data source
-            self._datatypes[data_container.__name__.lower()] = data_source(self.tmpdir, self.bindir, self.logger)
+        for data_container_cls in data_container_classes:
+            # Detect the declared data source type of the data container and instantiate it
+            data_source_cls = get_declared_source_type(data_container_cls)
+            if data_source_cls.__name__ not in self._datasources:
+                self._datasources[data_source_cls.__name__] = data_source_cls(self.tmpdir, self.bindir, self.logger)
+            data_source = self._datasources[data_source_cls.__name__]
+            # Instanciate the data container
+            self._datatypes[data_container_cls.__name__.lower()] = data_container_cls(data_source, self.logger)
         # debug print
         # for name, datatype in self._datatypes.items():
         #     print(f"Data container {name} is declared with source type: {datatype}")

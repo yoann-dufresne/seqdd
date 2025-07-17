@@ -1,7 +1,5 @@
-import logging
+from logging import Logger
 import re
-import subprocess
-import time
 from os import listdir, makedirs, path
 from shutil import rmtree, move
 
@@ -18,13 +16,14 @@ class Logan(DataContainer):
     # 'SRR[0-9]{6,}'
 
 
-    def __init__(self, source: UrlServer, unitigs: bool = False) -> None:
+    def __init__(self, source: UrlServer, logger: Logger, unitigs: bool = False) -> None:
         """
         """
         super().__init__(source)
+        source.set_urlformater(Logan.contigs_url_formater)
         self.source.set_delay(.35)
         self.unitigs = unitigs
-
+        self.logger = logger
 
     def set_option(self, option: str, value: str) -> None:
         """
@@ -35,8 +34,36 @@ class Logan(DataContainer):
         """
         if option == 'unitigs':
             self.unitigs = value == 'True'
+            self.source.set_urlformater(Logan.unitigs_url_formater if self.unitigs else Logan.contigs_url_formater)
         else:
             self.logger.warning(f'Unknown option: {option}')
+            
+    def unitigs_url_formater(acc: str) -> str:
+        """
+        Formats the URL for unitigs.
+        
+        :param url: The original URL.
+        :return: The formatted URL for unitigs.
+        """
+        if acc.startswith("http"):
+            return acc
+        filename = f'{acc}.unitigs.fa.zst'
+        url = f'https://s3.amazonaws.com/logan-pub/u/{acc}/{filename}'
+        return url
+    
+    def contigs_url_formater(acc: str) -> str:
+        """
+        Formats the URL for contigs.
+        
+        :param acc: The accession number.
+        :return: The formatted URL for contigs.
+        """
+        if acc.startswith("http"):
+            return acc
+        filename = f'{acc}.contigs.fa.zst'
+        url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{filename}'
+        return url
+        
 
     def get_download_jobs(self, datadir: str) -> list[Job]:
         """
@@ -79,8 +106,8 @@ class Logan(DataContainer):
             else:
                 filename = f'{acc}.contigs.fa.zst'
                 url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{filename}'
-            # Create the output file path
-            output_file = path.join(tmp_dir, filename)
+            # # Create the output file path
+            # output_file = path.join(tmp_dir, filename)
             # Create the command line job
             url_jobs = self.source.jobs_from_accessions([url], tmp_dir)
             for job in url_jobs:
@@ -113,7 +140,7 @@ class Logan(DataContainer):
         move(accession_dir, dest_dir)
 
 
-    def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
+    def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.
 
@@ -136,7 +163,7 @@ class Logan(DataContainer):
             else:
                 url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{acc}.contigs.fa.zst'
             
-            is_valid = len(self.url_server.filter_valid([url])) == 1
+            is_valid = len(self.source.filter_valid([url])) == 1
             if not is_valid:
                 self.logger.warning(f'Invalid Logan/SRA accession: {acc}')
             else:

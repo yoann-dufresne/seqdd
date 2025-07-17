@@ -39,7 +39,7 @@ class ReadArchives(DataContainer):
         return None
     
     
-    def __init__(self, source: ENA) -> None:
+    def __init__(self, source: ENA, logger: logging.Logger) -> None:
         """
         Initialize the ENA downloader object.
 
@@ -49,6 +49,7 @@ class ReadArchives(DataContainer):
             logger: The logger object.
         """
         super().__init__(source)
+        self.logger = logger
 
     
     # --- ENA Job creations ---
@@ -67,7 +68,7 @@ class ReadArchives(DataContainer):
         return self.source.jobs_from_accessions(self.data, datadir)
 
     
-    def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
+    def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.
 
@@ -85,7 +86,7 @@ class ReadArchives(DataContainer):
             if acc_source is not None:
                 valid_accessions.append(acc)
 
-        valid_accessions = self.source.filter_valid_accessions(valid_accessions)
+        valid_accessions = self.source.filter_valid(valid_accessions)
 
         return valid_accessions
     

@@ -47,7 +47,7 @@ class DataSource(metaclass=abc.ABCMeta):
         :param delay: The minimum delay in seconds.
         """
         self.min_delay = delay
-        self.logger.info(f'Setting minimum delay to {self.min_delay} seconds')
+        # self.logger.info(f'Setting minimum delay to {self.min_delay} seconds')
 
 
     def source_delay_ready(self) -> bool :

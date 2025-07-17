@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 
 from seqdd.utils.scheduler import Job
 from seqdd.register.sources.ena import ENA
@@ -24,7 +23,7 @@ class Assemblies(DataContainer):
 
     # Regular expression for each type of Reads accession
     accession_patterns = {
-        'RefSeq': r'GCF_\d{9}\.\d+',
+        # 'RefSeq': r'GCF_\d{9}\.\d+',
         'assembly': r'GCA_\d{9}\.\d+'
     }
     
@@ -36,7 +35,7 @@ class Assemblies(DataContainer):
         return None
     
     
-    def __init__(self, source: ENA) -> None:
+    def __init__(self, source: ENA, logger: logging.Logger) -> None:
         """
         Initialize the ENA downloader object.
 
@@ -46,6 +45,7 @@ class Assemblies(DataContainer):
             logger: The logger object.
         """
         super().__init__(source)
+        self.logger = logger
 
     
     # --- ENA Job creations ---
@@ -64,7 +64,7 @@ class Assemblies(DataContainer):
         return self.source.jobs_from_accessions(accessions, datadir)
 
     
-    def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
+    def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.
 
@@ -81,8 +81,10 @@ class Assemblies(DataContainer):
             acc_source = Assemblies.read_source(acc)
             if acc_source is not None:
                 valid_accessions.append(acc)
+            else:
+                self.logger.warning(f"Invalid accession format: {acc}. Expected formats: {', '.join(Assemblies.accession_patterns.values())}")
 
-        valid_accessions = self.source.filter_valid_accessions(valid_accessions)
+        valid_accessions = self.source.filter_valid(valid_accessions)
 
         return valid_accessions
     
