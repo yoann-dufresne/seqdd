@@ -250,7 +250,7 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     if args.unitigs:
         src_manip.set_option('unitigs', str(args.unitigs))
     # print(f"{args.type} => {src_manip}")
-    valid_accessions = src_manip.filter_valid_accessions(frozenset(new_accessions))
+    valid_accessions = src_manip.filter_valid(frozenset(new_accessions))
 
     # Add valid accessions
     accessions.update(valid_accessions)

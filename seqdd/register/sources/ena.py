@@ -185,7 +185,7 @@ class ENA(DataSource):
 
     # --- ENA accession validity ---
 
-    def filter_valid_accessions(self, accessions: list[str]) -> list[str]:
+    def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of ENA accessions and returns only the valid ones.
 

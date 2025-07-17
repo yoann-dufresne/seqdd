@@ -1,4 +1,4 @@
-
+import logging
 from seqdd.register.data_type import DataContainer
 from seqdd.register.sources.url_server import UrlServer
 
@@ -11,8 +11,9 @@ class URL(DataContainer):
     """
 
 
-    def __init__(self, source: UrlServer) -> None:
+    def __init__(self, source: UrlServer, logger: logging.Logger) -> None:
         super().__init__(source)
+        self.logger = logger
         
 
     def get_download_jobs(self, datadir: str) -> list[Job]:

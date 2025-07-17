@@ -11,8 +11,22 @@ class UrlServer(DataSource):
     A Source of download from urls
     """
     
-    def __init__(self, tmpdir, bindir, logger, min_delay = 0):
+    def __init__(self, tmpdir, bindir, logger, min_delay = 0, urlformater = None) -> None:
         super().__init__(tmpdir, bindir, logger, min_delay)
+        self.urlformater = urlformater
+        
+    
+    def set_urlformater(self, urlformater = None) -> None:
+        """
+        Set the URL formater function.
+
+        :param urlformater: A function to format the URL.
+        """
+        if urlformater is not None and callable(urlformater):
+            self.urlformater = urlformater
+        else:
+            self.logger.warning('No URL formater provided or it is not callable. Using default behavior.')
+            self.urlformater = None
         
 
     def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
@@ -66,7 +80,6 @@ class UrlServer(DataSource):
 
         return filename
     
-    
     def filter_valid(self, urls: list[str]) -> list[str]:
         """
         Filters the given list of urls and returns only the valid ones.
@@ -77,6 +90,10 @@ class UrlServer(DataSource):
         valid_accessions = []
 
         for url in urls:
+            print(f'Checking URL: {url}')
+            # If a URL formater is provided, format the URL
+            if self.urlformater:
+                url = self.urlformater(url)
             # Check if the accession is valid
             self.wait_my_turn()
             response = subprocess.run(['curl', '-I', url], capture_output=True)
