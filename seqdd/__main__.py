@@ -6,7 +6,7 @@ import logging
 import sys
 from tempfile import gettempdir
 
-from .register.reg_manager import save_accesions_to_source, create_register, Register
+from .register.reg_manager import save_accesions_to_file, create_register, Register
 from .register.datatype_manager import DataTypeManager
 from .utils.download import DownloadManager
 
@@ -162,7 +162,7 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.acc_by_src.keys() if args.type is None else [args.type]
+    src_names = reg.acc_by_datatype.keys() if args.type is None else [args.type]
     for name in src_names:
         acc_lst = reg.filter_accessions(name, valid_regexp)
         for acc in acc_lst:
@@ -187,7 +187,7 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.acc_by_src.keys() if args.type is None else args.type
+    src_names = reg.acc_by_datatype.keys() if args.type is None else args.type
     for name in src_names:
         acc_lst = reg.filter_accessions(name, valid_regexp)
 
@@ -227,13 +227,11 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     # Getting the file to the sources
     src_path = os.path.join(args.register_location, f"{args.type}.txt")
-    bin_dir = os.path.join(args.register_location, 'bin')
+    # bin_dir = os.path.join(args.register_location, 'bin')
     # load the register
     register = Register(logger, dirpath=args.register_location)
 
-    # Load previous accession list
-    accessions = register.acc_by_src.get(args.type, set())
-    size_before = len(accessions)
+    size_before = len(register)
 
     # Get the new accessions
     new_accessions = set()
@@ -242,23 +240,21 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     if os.path.isfile(args.file_of_accessions):
         with open(args.file_of_accessions) as fr:
             new_accessions.update([x.strip() for x in fr if len(x.strip()) > 0])
+            
+    # TODO: Handle the link between the source and the data type !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    # Verification of the accessions
-    datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
-    src_manip = datatype_manager.get_data_types()[args.type]
     # TODO: Improve option handling
     if args.unitigs:
-        src_manip.set_option('unitigs', str(args.unitigs))
+        register.data_containers[args.type].source.set_option('unitigs', str(args.unitigs))
     # print(f"{args.type} => {src_manip}")
     valid_accessions = src_manip.filter_valid(frozenset(new_accessions))
 
     # Add valid accessions
-    accessions.update(valid_accessions)
     logger.info(f"{len(accessions) - size_before} accessions added to the register")
 
     # Save the register
     if len(accessions) > size_before:
-        save_accesions_to_source(src_path, accessions)
+        save_accesions_to_file(src_path, accessions)
 
 
 def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -276,8 +272,7 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
     bindir = os.path.join(args.register_location, 'bin')
     datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
     reg = Register(logger, dirpath=args.register_location)
-    dm = DownloadManager(reg, datatype_manager,
-                         logger, bindir, args.tmp_directory)
+    dm = DownloadManager(reg, datatype_manager, logger)
     dm.download_to(args.download_directory, args.log_directory , args.max_processes)
 
 

@@ -13,12 +13,12 @@ from seqdd.register.datatype_manager import DataTypeManager
 class Register:
     """
     A class representing a register.
-    It is composed of subregisters from different sources (NCBI genomes, SRA, diverse urls).
+    It is composed of subregisters from different data types (assemblies, read archives, diverse urls).
     """
 
     major_version = 0
     """The major version of the register."""
-    minor_version = 0
+    minor_version = 1
     """minor_version (int): The minor version of the register."""
 
 
@@ -34,14 +34,24 @@ class Register:
 
         # Initialize the subregisters
         self.data_type_manager = DataTypeManager(logger)
-        self.acc_by_src = {k: set() for k in self.data_type_manager.get_data_types().keys()}
-
+        self.data_containers = self.data_type_manager.get_data_types()
+        
+        # load data content
         if dirpath is not None:
             self.load_from_dir(dirpath)
 
         if regfile is not None:
             self.load_from_file(regfile)
+        
 
+    def __len__(self) -> int:
+        """
+        Returns the total number of accessions in all subregisters.
+
+        :return: The total number of accessions in all subregisters.
+        """
+        return sum(len(dc) for dc in self.data_containers.values())
+    
 
     def load_from_dir(self, dirpath: str) -> bool:
         """
@@ -55,12 +65,12 @@ class Register:
             return False
 
         # Iterate over all the subregisters
-        for key in self.acc_by_src:
-            src_path = path.join(dirpath, f"{key}.txt")
+        for name, data_container in self.data_containers.items():
+            src_path = path.join(dirpath, f"{name}.txt")
             # Is the subregister exists ?
             if path.exists(src_path):
                 # Load a subregister from its file
-                self.acc_by_src[key].update(get_accessions_from_source(src_path))
+                data_container.add_data(get_accessions_from_source(src_path))
 
         self.logger.debug(f'Register loaded from {dirpath}')
         return True
@@ -78,13 +88,13 @@ class Register:
             return False
 
         # Iterate over all the subregisters
-        for key in self.acc_by_src:
-            src_path = path.join(dirpath, f"{key}.txt")
-            if len(self.acc_by_src[key]) > 0:
-                # Save a subregister to its file
-                save_accesions_to_source(src_path, self.acc_by_src[key])
+        for name, data_container in self.data_containers.items():
+            src_path = path.join(dirpath, f"{name}.txt")
+            # If the subregister is not empty, save it
+            if len(data_container) > 0:
+                save_accesions_to_file(src_path, data_container.data)
             elif path.exists(src_path):
-                # Remove the file if the subregister is empty
+                # If the subregister is empty, remove the file
                 remove(src_path)
 
         self.logger.debug(f'Register saved to {dirpath}')
@@ -101,11 +111,11 @@ class Register:
         with open(file, 'w') as fw:
             print(f'version {Register.major_version}.{Register.minor_version}', file=fw)
             # Iterate over all the subregisters
-            for key in self.acc_by_src:
-                if len(self.acc_by_src[key]) > 0:
-                    print(f"{key}\t{len(self.acc_by_src[key])}", file=fw)
-                    # Save the list of accessions
-                    print('\n'.join(self.acc_by_src[key]), file=fw)
+            for name, data_container in self.data_containers.items():
+                # If the subregister is not empty, save it
+                if len(data_container) > 0:
+                    print(f"{name}\t{len(data_container)}", file=fw)
+                    print('\n'.join(data_container.data), file=fw)
 
         self.logger.debug(f'Datasets saved to register file {file}')
 
@@ -139,15 +149,27 @@ class Register:
             current_register = None
             for line in fr:
                 line = line.strip()
-                # New register
+                # Skip empty lines
+                if len(line) == 0:
+                    continue
+                # skip comment lines
+                if line.startswith('#'):
+                    continue
+                # Waiting for the next register
                 if remaining_to_read == 0:
                     split = line.split('\t')
                     if len(split) == 2:
                         current_register = split[0]
                         remaining_to_read = int(split[1])
+                    else:
+                        self.logger.error(f"Invalid line format in register file: {line}. Exiting loading.")
+                        return
                 # Add the next accession from the current register
-                else :
-                    self.acc_by_src[current_register].add(line)
+                else:
+                    if current_register not in self.data_containers:
+                        self.logger.error(f"Unknown register {current_register} in the file {file}. Exiting loading.")
+                        return
+                    self.data_containers[current_register].add(line)
                     remaining_to_read -= 1
 
         self.logger.debug(f'Data from {file} successfully loaded')
@@ -160,12 +182,12 @@ class Register:
         :param source: The source to remove the accession from.
         :param accession: The accession to remove.
         """
-        if source not in self.acc_by_src:
-            self.logger.error(f"Source {source} not found in the register.")
+        if source not in self.data_containers:
+            self.logger.error(f"Data type {source} not found in the register.")
             return
 
-        if accession in self.acc_by_src[source]:
-            self.acc_by_src[source].remove(accession)
+        if accession in self.data_containers[source].data:
+            self.data_containers[source].remove_data([accession])
             self.logger.info(f"Accession {accession} removed from {source}")
         else:
             self.logger.warning(f"Accession {accession} not found in {source}")
@@ -179,11 +201,11 @@ class Register:
         :param regexps: A list of regular expressions.
         :return:  A list of accessions from the source that match at least one of the regexps.
         """
-        if source not in self.acc_by_src:
+        if source not in self.data_containers:
             self.logger.error(f"Source {source} not found in the register.")
             return []
 
-        return [acc for acc in self.acc_by_src[source] if any(re.match(regexp, acc) for regexp in regexps)]
+        return [acc for acc in self.data_containers[source].data if any(re.match(regexp, acc) for regexp in regexps)]
 
 
     def __repr__(self) -> str:
@@ -191,7 +213,7 @@ class Register:
 
         :return: A string representation of the Register object.
         """
-        return '\n'.join(f'{sub} : [{", ".join(self.acc_by_src[sub])}]' for sub in self.acc_by_src)
+        return '\n'.join(f'{sub} : [{", ".join(self.data_containers[sub].data)}]' for sub in self.data_containers.keys())
 
 
 # --- Register files load/save ---
@@ -217,13 +239,13 @@ def get_accessions_from_source(sourcepath: str) -> set[str]:
     return accessions
 
 
-def save_accesions_to_source(sourcepath: str, accessions: Iterable[str]) -> None:
+def save_accesions_to_file(filepath: str, accessions: Iterable[str]) -> None:
     """
-    write accessions to source corresponding to sourcepath. *Warning* if source path exist overwrite it.
-    :param sourcepath: The path of this register corresponding a source
-    :param accessions: The list of accessions to write in sourcepath
+    write accessions to source corresponding to filepath. *Warning* if source path exist overwrite it.
+    :param filepath: The path of this register corresponding a source
+    :param accessions: The list of accessions to write in filepath
     """
-    with open(sourcepath, 'w') as fw:
+    with open(filepath, 'w') as fw:
         for acc in accessions:
             print(acc, file=fw)
 

@@ -35,6 +35,17 @@ class DataTypeManager:
             self.fill_datatypes()
         return self._datatypes
     
+    def get_datacontainer(self, datatype: str) -> DataContainer:
+        """
+        Returns a DataContainer instance for the specified data type.
+        
+        :param datatype: The name of the data type.
+        :returns: A DataContainer instance for the specified data type, or None if not found
+        """
+        if self._datatypes is None:
+            self.fill_datatypes()
+        return self._datatypes[datatype.lower()] if datatype.lower() in self._datatypes else None
+    
     def fill_datatypes(self) -> None:
         """
         Fills the datatypes class variable with all available data types.
