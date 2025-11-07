@@ -27,13 +27,13 @@ class TestRegister(SeqddTest):
 
     def test_init(self):
         reg = Register(self.logger)
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {ds: set() for ds in self.data_sources})
 
         reg = Register(self.logger, dirpath=self._tmp_dir.name)
         # The directory is empty
         # so acc_by_src also we test with data in test_load_from_dir
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {ds: set() for ds in self.data_sources})
 
         reg = Register(self.logger, regfile=self.find_data('register.reg'))
@@ -41,7 +41,7 @@ class TestRegister(SeqddTest):
                     'logan': set(['SRR6246166_contigs'])}
         for ds in self.data_sources:
             with self.subTest(data_source=ds):
-                accs = reg.acc_by_src[ds]
+                accs = reg.acc_by_datatype[ds]
                 if ds in reg_file:
                     self.assertSetEqual(accs, reg_file[ds])
                 else:
@@ -59,7 +59,7 @@ class TestRegister(SeqddTest):
                 os.unlink(register_name)
             log_msg = log.get_value().rstrip()
         self.assertFalse(resp)
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {ds: set() for ds in self.data_sources})
         self.assertEqual(log_msg,
                          f'Register {register_name} does not exist.')
@@ -72,7 +72,7 @@ class TestRegister(SeqddTest):
 
         resp = reg.load_from_dir(register_name)
         self.assertTrue(resp)
-        for ds, accs in reg.acc_by_src.items():
+        for ds, accs in reg.acc_by_datatype.items():
             with self.subTest(data_source=ds):
                 excp_value = set()
                 excp_value.add(acc_by_src[ds])
@@ -87,7 +87,7 @@ class TestRegister(SeqddTest):
                     'logan': {'SRR6246166_contigs'}}
         for ds in self.data_sources:
             with self.subTest(data_source=ds):
-                accs = reg.acc_by_src[ds]
+                accs = reg.acc_by_datatype[ds]
                 if ds in reg_file:
                     self.assertSetEqual(accs, reg_file[ds])
                 else:
@@ -111,7 +111,7 @@ class TestRegister(SeqddTest):
             log_msg = log.get_value().rstrip()
         self.assertEqual(log_msg,
                          'Missing version number at the beginning of the reg file. Skipping the loading')
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {ds: set() for ds in self.data_sources})
 
 
@@ -134,7 +134,7 @@ class TestRegister(SeqddTest):
         self.assertEqual(log_msg, 'Incompatible versions. '
                                   'Your register is major version 1 while the tool awaits version 0. '
                                   'Skipping the loading')
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {ds: set() for ds in self.data_sources})
 
 
@@ -157,7 +157,7 @@ class TestRegister(SeqddTest):
         self.assertEqual(log_msg, 'Incompatible versions. '
                                   'Your register is major version 0.5 while the tool awaits maximum version 0.0 . '
                                   'Skipping the loading')
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {ds: set() for ds in self.data_sources})
 
 
@@ -185,7 +185,7 @@ class TestRegister(SeqddTest):
                 self.logger.setLevel(level)
             log_msg = log.get_value().rstrip()
         
-        self.assertDictEqual(reg.acc_by_src,
+        self.assertDictEqual(reg.acc_by_datatype,
                              {'readarchives': {'SRA000001', 'GCA_000002', 'ENA_000001'},
                                 'logan': {'SRR6246166_contigs'},
                                 'url': set()
@@ -222,9 +222,9 @@ class TestRegister(SeqddTest):
         reg = Register(self.logger, regfile=register_path)
         ds = 'readarchives'
         acc = 'GCA_000001'
-        self.assertSetEqual(reg.acc_by_src[ds], {'SRA000001', 'GCA_000001', 'GCA_000002', 'ENA_000001'})
+        self.assertSetEqual(reg.acc_by_datatype[ds], {'SRA000001', 'GCA_000001', 'GCA_000002', 'ENA_000001'})
         reg.remove_accession(ds, acc)
-        self.assertSetEqual(reg.acc_by_src[ds], {'SRA000001', 'GCA_000002', 'ENA_000001'})
+        self.assertSetEqual(reg.acc_by_datatype[ds], {'SRA000001', 'GCA_000002', 'ENA_000001'})
 
 
     def test_filter_accessions(self):
@@ -275,7 +275,7 @@ class TestRegister(SeqddTest):
         new_register_path = os.path.join(self._tmp_dir.name, register_saved)
         reg.save_to_file(new_register_path)
         reg_saved = Register(self.logger, regfile=new_register_path)
-        self.assertDictEqual(reg.acc_by_src, reg_saved.acc_by_src)
+        self.assertDictEqual(reg.acc_by_datatype, reg_saved.acc_by_datatype)
 
 
     def test_save_to_dir(self):
@@ -317,7 +317,7 @@ class TestRegister(SeqddTest):
                          f'Register saved to {new_register_path}')
 
         reg_saved = Register(self.logger, dirpath=new_register_path)
-        self.assertDictEqual(reg.acc_by_src, reg_saved.acc_by_src)
+        self.assertDictEqual(reg.acc_by_datatype, reg_saved.acc_by_datatype)
 
 
 class TestSrcRegister(SeqddTest):
