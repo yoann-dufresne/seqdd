@@ -231,30 +231,30 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     # load the register
     register = Register(logger, dirpath=args.register_location)
 
-    size_before = len(register)
-
-    # Get the new accessions
+    # Get the accessions given by the command line
     new_accessions = set()
     if len(args.accessions) > 0:
         new_accessions.update(args.accessions)
     if os.path.isfile(args.file_of_accessions):
         with open(args.file_of_accessions) as fr:
             new_accessions.update([x.strip() for x in fr if len(x.strip()) > 0])
-            
-    # TODO: Handle the link between the source and the data type !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+    # Get the right data type container
+    data_type_container = register.data_containers[args.type]
+    new_accessions -= data_type_container.data
 
     # TODO: Improve option handling
     if args.unitigs:
-        register.data_containers[args.type].source.set_option('unitigs', str(args.unitigs))
-    # print(f"{args.type} => {src_manip}")
-    valid_accessions = src_manip.filter_valid(frozenset(new_accessions))
+        data_type_container.source.set_option('unitigs', str(args.unitigs))
+    valid_accessions = data_type_container.filter_valid(frozenset(new_accessions))
 
     # Add valid accessions
-    logger.info(f"{len(accessions) - size_before} accessions added to the register")
+    logger.info(f"{len(valid_accessions)} accessions added to the register")
+    data_type_container.add_data(list(valid_accessions))
 
     # Save the register
-    if len(accessions) > size_before:
-        save_accesions_to_file(src_path, accessions)
+    if len(valid_accessions) > 0:
+        register.save_to_dir(dirpath=args.register_location)
 
 
 def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
