@@ -202,7 +202,7 @@ class TestEna(SeqddTest):
                 # filter_validate_accessions does not log anythings
                 # but it call validate_accession which log invalid (regexp) acc
                 # do not test the log as it is tested with test_validate_accession
-                valid_accs = ena.filter_valid_accessions(accs)
+                valid_accs = ena.filter_valid(accs)
         finally:
             ena.valid_accessions_on_API = ena_valid_accessions_on_API_ori
 
