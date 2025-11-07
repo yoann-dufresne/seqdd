@@ -34,6 +34,7 @@ class DownloadManager:
         # This is used to get the source manager for each data type
         # and to handle the download of datasets from different sources.
         self.datatype_manager = datatype_manager
+        self.logger = self.register.logger
 
 
     def download_to(self, datadir, logdir, max_process=8) -> None:
@@ -51,20 +52,21 @@ class DownloadManager:
         makedirs(logdir)
 
         # Create a dictionary to store the jobs for each data type
-        jobs = {data_type: [] for data_type in self.register.acc_by_datatype}
+        jobs = {}
 
         # Create the jobs for each data type
-        for type_name in self.register.acc_by_datatype:
-            reg_content = self.register.acc_by_datatype[type_name]
-            print(f"Source {type_name} has {len(reg_content)} accessions to download.")
-            manipulator = self.datatype_manager.get_datacontainer(type_name)
-            if manipulator is None:
-                self.logger.warning(f"No manipulator found for data type {type_name}. Skipping.")
-                continue
+        for type_name in self.register.data_containers.keys():
+            # reg_content = self.register.acc_by_datatype[type_name]
+            # print(f"Source {type_name} has {len(reg_content)} accessions to download.")
+            # manipulator = self.datatype_manager.get_datacontainer(type_name)
+            # if manipulator is None:
+            #     self.logger.warning(f"No manipulator found for data type {type_name}. Skipping.")
+            #     continue
             # Create jobs for each accession in the register
-            jobs[type_name] = manipulator.get_download_jobs(reg_content, datadir)
-            print(f"Created {len(jobs[type_name])} jobs for data type {type_name}.")
-        exit(0)
+            container = self.register.data_containers[type_name]
+            if len(container) > 0:
+                jobs[type_name] = container.get_download_jobs(datadir)
+                print(f"Created {len(jobs[type_name])} jobs for data type {type_name}.")
 
         # Create a JobManager instance
         manager = JobManager(max_process=max_process, log_folder=logdir, logger=self.logger)
