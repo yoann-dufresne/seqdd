@@ -187,15 +187,14 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.acc_by_datatype.keys() if args.type is None else args.type
-    for name in src_names:
-        acc_lst = reg.filter_accessions(name, valid_regexp)
-
-        if len(acc_lst) > 0:
-            print(f"- {name}:")
-            for idx in range(0, len(acc_lst), 5):
-                current_slice = acc_lst[idx:idx+5]
-                print("\t".join(current_slice))
+    for name, container in reg.data_containers.items():
+        if len(container) == 0:
+            continue
+        print(f"- {name}:")
+        data_list = list(container.data)
+        for idx in range(0, len(container), 5):
+            current_slice = data_list[idx:idx+5]
+            print("\t".join(current_slice))
 
 
 def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
