@@ -207,12 +207,13 @@ def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     logger.info('Init register')
     location = args.register_location
+    frc = False if not hasattr(args, 'force') else args.force
     try:
-        register = create_register(location, logger, force=args.force)
+        register = create_register(location, logger, force=frc)
     except FileExistsError as err:
         sys.exit(str(err))
 
-    if args.register_file is not None:
+    if not hasattr(args, 'register_file') and args.register_file is not None:
         register.load_from_file(args.register_file)
         register.save_to_dir(location)
     logger.info(f'Created at location {args.register_location}')
@@ -311,8 +312,13 @@ def main() -> None:
     # Verify the existence of the data register
     if args.cmd != 'init':
         if not os.path.isdir(args.register_location):
-            print('No data register found. Please first run the init command.', file=sys.stderr)
-            exit(1)
+            # Initialization on add
+            if args.cmd == 'add':
+                on_init(args, logger=logger)
+            else:
+                # No register found
+                print('No data register found. Please first run the init command.', file=sys.stderr)
+                exit(1)
 
     # Apply the right command
     cmd_to_apply = globals()[f"on_{args.cmd}"]
