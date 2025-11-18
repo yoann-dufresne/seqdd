@@ -213,7 +213,7 @@ def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
     except FileExistsError as err:
         sys.exit(str(err))
 
-    if not hasattr(args, 'register_file') and args.register_file is not None:
+    if hasattr(args, 'register_file') and args.register_file is not None:
         register.load_from_file(args.register_file)
         register.save_to_dir(location)
     logger.info(f'Created at location {args.register_location}')
@@ -314,6 +314,7 @@ def main() -> None:
         if not os.path.isdir(args.register_location):
             # Initialization on add
             if args.cmd == 'add':
+
                 on_init(args, logger=logger)
             else:
                 # No register found
