@@ -162,11 +162,20 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
 
     reg = Register(logger, dirpath=args.register_location)
-    src_names = reg.acc_by_datatype.keys() if args.type is None else [args.type]
-    for name in src_names:
-        acc_lst = reg.filter_accessions(name, valid_regexp)
-        for acc in acc_lst:
-            reg.remove_accession(name, acc)
+    src_types = reg.data_containers.keys() if args.type is None else [args.type]
+    to_remove = set(args.accessions)
+    total_removed = 0
+
+    for type in src_types:
+        container = reg.data_containers[type]
+        size = len(container)
+        container.remove_data(to_remove)
+        removed = size - len(container)
+        total_removed += removed
+        if removed > 0:
+            logger.info(f"{removed} accession(s) of type {type} were removed")
+
+    logger.info(f"A total of {total_removed} accession(s) were removed from the register")
     reg.save_to_dir(args.register_location)
 
 
