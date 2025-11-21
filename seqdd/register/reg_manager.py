@@ -169,7 +169,7 @@ class Register:
                     if current_register not in self.data_containers:
                         self.logger.error(f"Unknown register {current_register} in the file {file}. Exiting loading.")
                         return
-                    self.data_containers[current_register].add(line)
+                    self.data_containers[current_register].add_data([line])
                     remaining_to_read -= 1
 
         self.logger.debug(f'Data from {file} successfully loaded')
