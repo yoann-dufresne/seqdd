@@ -46,9 +46,9 @@ class TestEna(SeqddTest):
 
     def test_src_delay_ready(self):
         ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
-        self.assertTrue(ena.ena_delay_ready())
+        self.assertTrue(ena.source_delay_ready())
         ena.last_query = time.time()
-        self.assertFalse(ena.ena_delay_ready())
+        self.assertFalse(ena.source_delay_ready())
 
 
     def test_wait_my_turn(self):
