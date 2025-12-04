@@ -86,13 +86,7 @@ class Logan(DataContainer):
             # Skip already downloaded accessions
             if acc_dirname in downloaded_accessions:
                 continue
-
             job_name = acc_dirname
-            # Create a temporary directory for the accession
-            tmp_dir = path.join(self.tmp_dir, acc_dirname)
-            if path.exists(tmp_dir):
-                rmtree(tmp_dir)
-            makedirs(tmp_dir)
 
             print(acc)
             acc, type = acc.split('_')
@@ -109,35 +103,14 @@ class Logan(DataContainer):
             # # Create the output file path
             # output_file = path.join(tmp_dir, filename)
             # Create the command line job
-            url_jobs = self.source.jobs_from_accessions([url], tmp_dir)
+            url_jobs = self.source.jobs_from_accessions([url], datadir)
             for job in url_jobs:
                 if job.name.startswith('url_'):
                     # Rename the job to the accession name
                     job.name = f'{job_name}_download'
             jobs.extend(url_jobs)
 
-            # Create a function job to move the files to the final directory
-            jobs.append(FunctionJob(
-                func_to_run = self.move_and_clean,
-                func_args = (tmp_dir, datadir),
-                parents = url_jobs,
-                name=f'{job_name}_move'
-            ))
-
         return jobs
-
-
-    def move_and_clean(self, accession_dir: str, outdir: str) -> None:
-        """
-        Moves the downloaded files from the accession directory to the output directory and cleans up the temporary directory.
-
-        :param accession_dir: The directory path containing the downloaded files.
-        :param outdir: The output directory path.
-        """
-        acc_dirname = path.basename(accession_dir)
-        dest_dir = path.join(outdir, acc_dirname)
-
-        move(accession_dir, dest_dir)
 
 
     def filter_valid(self, accessions: list[str]) -> list[str]:
