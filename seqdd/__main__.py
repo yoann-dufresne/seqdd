@@ -254,7 +254,7 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
 
     # TODO: Improve option handling
     if args.unitigs:
-        data_type_container.source.set_option('unitigs', str(args.unitigs))
+        data_type_container.set_option('unitigs', str(args.unitigs))
     valid_accessions = data_type_container.filter_valid(frozenset(new_accessions))
 
     # Add valid accessions

@@ -38,6 +38,12 @@ class DataContainer:
         :return: The number of items in the data container.
         """
         return len(self.data)
+    
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        
+        return self.data == other.data
         
     @abstractmethod
     def get_download_jobs(self, datadir: str) -> list[Job]:
