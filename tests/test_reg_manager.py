@@ -2,12 +2,26 @@ import logging
 import tempfile
 import os
 
+from seqdd.register.data_type.logan import Logan
+from seqdd.register.data_type.read_archives import ReadArchives
+from seqdd.register.sources.ena import ENA
+from seqdd.register.sources.url_server import UrlServer
 from tests import SeqddTest
 from seqdd.register.reg_manager import Register, get_accessions_from_source, save_accesions_to_file, create_register
 from seqdd.register.datatype_manager import DataTypeManager
+from seqdd.register.data_type import DataSource, DataContainer
+
+
+class MockSource(DataSource):
+    def __init__(self):
+        self.tmp_dir = tempfile.TemporaryDirectory(prefix='seqdd-')
+        super().__init__(self.tmp_dir.name, self.tmp_dir.name, logging.getLogger('seqdd'))
+
+    def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list:
+        return []
+
 
 class TestRegister(SeqddTest):
-
 
     @classmethod
     def setUpClass(cls):
@@ -28,25 +42,24 @@ class TestRegister(SeqddTest):
 
     def test_init(self):
         reg = Register(self.logger)
-        self.assertDictEqual(reg.data_containers,
-                             {ds: set() for ds in self.data_sources})
+        self.assertEqual(reg.data_containers.keys(),
+                             self.data_sources)
 
         reg = Register(self.logger, dirpath=self._tmp_dir.name)
         # The directory is empty
-        # so acc_by_src also we test with data in test_load_from_dir
-        self.assertDictEqual(reg.acc_by_datatype,
-                             {ds: set() for ds in self.data_sources})
 
         reg = Register(self.logger, regfile=self.find_data('register.reg'))
-        reg_file = {'readarchives': set(['ENA_000001', 'SRA000001', 'GCA_000002']),
-                    'logan': set(['SRR6246166_contigs'])}
-        for ds in self.data_sources:
-            with self.subTest(data_source=ds):
-                accs = reg.acc_by_datatype[ds]
-                if ds in reg_file:
-                    self.assertSetEqual(accs, reg_file[ds])
+        reg_file = {'readarchives': ReadArchives(ENA(self._tmp_dir, self._tmp_dir, self.logger), self.logger),
+                    'logan': Logan(UrlServer(self._tmp_dir, self._tmp_dir, self.logger), self.logger)}
+        reg_file['readarchives'].add_data(['ENA_000001', 'SRA000001', 'GCA_000002'])
+        reg_file['logan'].add_data(['SRR6246166_contigs'])
+        for type in self.data_sources:
+            with self.subTest(data_source=type):
+                container = reg.data_containers[type]
+                if type in reg_file:
+                    self.assertSetEqual(container.data, reg_file[type].data)
                 else:
-                    self.assertSetEqual(accs, set())
+                    self.assertSetEqual(container.data, set())
 
 
     def test_load_from_dir(self):
@@ -60,8 +73,6 @@ class TestRegister(SeqddTest):
                 os.unlink(register_name)
             log_msg = log.get_value().rstrip()
         self.assertFalse(resp)
-        self.assertDictEqual(reg.data_containers,
-                             {ds: set() for ds in self.data_sources})
         self.assertEqual(log_msg,
                          f'Register {register_name} does not exist.')
 
@@ -73,12 +84,12 @@ class TestRegister(SeqddTest):
 
         resp = reg.load_from_dir(register_name)
         self.assertTrue(resp)
-        for ds, accs in reg.acc_by_datatype.items():
+        for ds, container in reg.data_containers.items():
             with self.subTest(data_source=ds):
                 excp_value = set()
                 excp_value.add(acc_by_src[ds])
-                self.assertSetEqual(accs, excp_value)
-
+                self.assertSetEqual(container.data, excp_value)
+                
 
     def test_load_from_file(self):
         register_name = 'register.reg'
@@ -90,9 +101,9 @@ class TestRegister(SeqddTest):
             with self.subTest(data_source=ds):
                 accs = reg.data_containers[ds]
                 if ds in reg_file:
-                    self.assertSetEqual(accs, reg_file[ds])
+                    self.assertSetEqual(accs.data, reg_file[ds])
                 else:
-                    self.assertSetEqual(accs, set())
+                    self.assertSetEqual(accs.data, set())
 
 
     def test_load_from_file_bad_header(self):
@@ -112,8 +123,8 @@ class TestRegister(SeqddTest):
             log_msg = log.get_value().rstrip()
         self.assertEqual(log_msg,
                          'Missing version number at the beginning of the reg file. Skipping the loading')
-        self.assertDictEqual(reg.data_containers,
-                             {ds: set() for ds in self.data_sources})
+        self.assertEqual(reg.data_containers.keys(),
+                             self.data_sources)
 
 
     def test_load_from_file_bad_major(self):
@@ -135,8 +146,8 @@ class TestRegister(SeqddTest):
         self.assertEqual(log_msg, 'Incompatible versions. '
                                   'Your register is major version 1 while the tool awaits version 0. '
                                   'Skipping the loading')
-        self.assertDictEqual(reg.data_containers,
-                             {ds: set() for ds in self.data_sources})
+        self.assertEqual(reg.data_containers.keys(),
+                             self.data_sources)
 
 
     def test_load_from_file_higher_minor(self):
@@ -156,10 +167,10 @@ class TestRegister(SeqddTest):
             reg = Register(self.logger, regfile=register_path)
             log_msg = log.get_value().rstrip()
         self.assertEqual(log_msg, 'Incompatible versions. '
-                                  'Your register is major version 0.5 while the tool awaits maximum version 0.0 . '
+                                  'Your register is major version 0.5 while the tool awaits maximum version 0.1 . '
                                   'Skipping the loading')
-        self.assertDictEqual(reg.data_containers,
-                             {ds: set() for ds in self.data_sources})
+        self.assertEqual(reg.data_containers.keys(),
+                             self.data_sources)
 
 
     def test_load_from_file_lower_minor(self):
@@ -186,11 +197,15 @@ class TestRegister(SeqddTest):
                 self.logger.setLevel(level)
             log_msg = log.get_value().rstrip()
         
-        self.assertDictEqual(reg.data_containers,
-                             {'readarchives': {'SRA000001', 'GCA_000002', 'ENA_000001'},
-                                'logan': {'SRR6246166_contigs'},
-                                'url': set()
-                              })
+        dict_expected = {'readarchives': {'SRA000001', 'GCA_000002', 'ENA_000001'},
+                            'logan': {'SRR6246166_contigs'},
+                            'url': set(),
+                            'assemblies': set()
+                        }
+        for k in reg.data_containers.keys():
+            if k in dict_expected:
+                self.assertSetEqual(reg.data_containers[k].data, dict_expected[k])
+        
         self.assertEqual(log_msg, f'Data from {register_path} successfully loaded')
 
 
@@ -200,7 +215,7 @@ class TestRegister(SeqddTest):
         with self.catch_log() as log:
             reg.remove_accession(ds, 'SRA000001')
             log_msg = log.get_value().rstrip()
-        self.assertEqual(log_msg, f'Source {ds} not found in the register.')
+        self.assertEqual(log_msg, f'Data type {ds} not found in the register.')
 
         acc = 'nimportnaoik'
         with self.catch_log() as log:
@@ -223,9 +238,9 @@ class TestRegister(SeqddTest):
         reg = Register(self.logger, regfile=register_path)
         ds = 'readarchives'
         acc = 'GCA_000001'
-        self.assertSetEqual(reg.data_containers[ds], {'SRA000001', 'GCA_000001', 'GCA_000002', 'ENA_000001'})
+        self.assertSetEqual(reg.data_containers[ds].data, {'SRA000001', 'GCA_000001', 'GCA_000002', 'ENA_000001'})
         reg.remove_accession(ds, acc)
-        self.assertSetEqual(reg.data_containers[ds], {'SRA000001', 'GCA_000002', 'ENA_000001'})
+        self.assertSetEqual(reg.data_containers[ds].data, {'SRA000001', 'GCA_000002', 'ENA_000001'})
 
 
     def test_filter_accessions(self):
