@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 
 from seqdd.utils.scheduler import Job
 from seqdd.register.sources.ena import ENA

@@ -9,7 +9,7 @@ from seqdd.register.sources.url_server import UrlServer
 from tests import SeqddTest
 from seqdd.register.reg_manager import Register, get_accessions_from_source, save_accesions_to_file, create_register
 from seqdd.register.datatype_manager import DataTypeManager
-from seqdd.register.data_type import DataSource, DataContainer
+from seqdd.register.data_type import DataSource
 
 
 class MockSource(DataSource):
