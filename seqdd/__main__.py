@@ -6,7 +6,7 @@ import logging
 import sys
 from tempfile import gettempdir
 
-from .register.reg_manager import save_accesions_to_file, create_register, Register
+from .register.reg_manager import create_register, Register
 from .register.datatype_manager import DataTypeManager
 from .utils.download import DownloadManager
 
@@ -235,7 +235,7 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     :param logger: The object to log
     """
     # Getting the file to the sources
-    src_path = os.path.join(args.register_location, f"{args.type}.txt")
+    # src_path = os.path.join(args.register_location, f"{args.type}.txt")
     # bin_dir = os.path.join(args.register_location, 'bin')
     # load the register
     register = Register(logger, dirpath=args.register_location)
@@ -278,7 +278,7 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
         args.max_processes = max_threads_available
         logger.warning(f"The maximal number of threads available is {max_threads_available} "
                        f"set '--max-processes {max_threads_available}'.")
-    bindir = os.path.join(args.register_location, 'bin')
+    # bindir = os.path.join(args.register_location, 'bin')
     datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
     reg = Register(logger, dirpath=args.register_location)
     dm = DownloadManager(reg, datatype_manager, logger)

@@ -1,10 +1,9 @@
 from logging import Logger
 import re
-from os import listdir, makedirs, path
-from shutil import rmtree, move
+from os import listdir
 
 from seqdd.register.data_type import DataContainer
-from seqdd.utils.scheduler import Job, FunctionJob
+from seqdd.utils.scheduler import Job
 from seqdd.register.sources.url_server import UrlServer
 
 

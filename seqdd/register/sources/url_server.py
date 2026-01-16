@@ -1,7 +1,6 @@
 
 from os import path
 import subprocess
-import time
 from urllib.parse import urlparse
 from seqdd.utils.scheduler import CmdLineJob, Job
 from seqdd.register.sources import DataSource

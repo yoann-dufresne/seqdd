@@ -3,6 +3,7 @@ import importlib
 import inspect
 import logging
 import pkgutil
+from typing import get_type_hints
 
 from seqdd.register.data_type import DataContainer
 
@@ -97,8 +98,6 @@ def find_subclasses_in_package(package_name: str, base_class: type) -> list[type
 
     return subclasses
 
-
-from typing import get_type_hints
 
 def get_declared_source_type(cls):
     while cls is not object:
