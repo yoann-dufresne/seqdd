@@ -50,18 +50,17 @@ class Assemblies(DataContainer):
     
     # --- ENA Job creations ---
 
-    def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
+    def get_download_jobs(self, datadir: str) -> list[Job]:
         """
         Generates a list of jobs for downloading and processing Logan datasets.
 
         Args:
-            accessions (list): A list of Logan/SRA accessions.
             datadir (str): The output directory path.
 
         Returns:
             list: A list of jobs for downloading and processing Logan datasets.
         """
-        return self.source.jobs_from_accessions(accessions, datadir)
+        return self.source.jobs_from_accessions(self.data, datadir)
 
     
     def filter_valid(self, accessions: list[str]) -> list[str]:

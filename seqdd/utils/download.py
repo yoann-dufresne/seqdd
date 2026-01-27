@@ -65,6 +65,7 @@ class DownloadManager:
             # Create jobs for each accession in the register
             container = self.register.data_containers[type_name]
             if len(container) > 0:
+                print(type_name, len(container))
                 jobs[type_name] = container.get_download_jobs(datadir)
                 print(f"Created {len(jobs[type_name])} jobs for data type {type_name}.")
 

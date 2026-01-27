@@ -89,6 +89,11 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                           type=int,
                           default=threads_available() // 2,
                           help='Number of processes to run in parallel.')
+    download.add_argument('-r', '--register-file',
+                          help='Register file to import and download from. Using this option will create a local register and then download from it.')
+    download.add_argument('-f', '--force',
+                          action='store_true',
+                          help='Used only with --register-file. Force reconstruction of the local register.')
     download.add_argument('--tmp-directory',
                           default=os.path.join(gettempdir(), 'seqdd'),
                           help='Temporary directory to store and organize the downloaded files')
@@ -321,13 +326,16 @@ def main() -> None:
     if args.cmd != 'init':
         if not os.path.isdir(args.register_location):
             # Initialization on add
-            if args.cmd == 'add':
-
+            if args.cmd in 'add':
+                on_init(args, logger=logger)
+            elif args.cmd == 'download' and args.register_file is not None:
                 on_init(args, logger=logger)
             else:
                 # No register found
                 print('No data register found. Please first run the init command.', file=sys.stderr)
                 exit(1)
+        elif args.cmd == 'download' and args.register_file is not None:
+            on_init(args, logger=logger)
 
     # Apply the right command
     cmd_to_apply = globals()[f"on_{args.cmd}"]
