@@ -49,8 +49,8 @@ class TestRegister(SeqddTest):
         # The directory is empty
 
         reg = Register(self.logger, regfile=self.find_data('register.reg'))
-        reg_file = {'readarchives': ReadArchives(ENA(self._tmp_dir, self._tmp_dir, self.logger), self.logger),
-                    'logan': Logan(UrlServer(self._tmp_dir, self._tmp_dir, self.logger), self.logger)}
+        reg_file = {'readarchives': ReadArchives(ENA(self._tmp_dir, self.logger), self.logger),
+                    'logan': Logan(UrlServer(self._tmp_dir, self.logger), self.logger)}
         reg_file['readarchives'].add_data(['ENA_000001', 'SRA000001', 'GCA_000002'])
         reg_file['logan'].add_data(['SRR6246166_contigs'])
         for type in self.data_sources:

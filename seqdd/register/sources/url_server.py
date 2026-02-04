@@ -10,8 +10,8 @@ class UrlServer(DataSource):
     A Source of download from urls
     """
     
-    def __init__(self, tmpdir, bindir, logger, min_delay = 0, urlformater = None) -> None:
-        super().__init__(tmpdir, bindir, logger, min_delay)
+    def __init__(self, tmpdir, logger, min_delay = 0, urlformater = None) -> None:
+        super().__init__(tmpdir, logger, min_delay)
         self.urlformater = urlformater
         
     

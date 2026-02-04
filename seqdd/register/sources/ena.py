@@ -26,15 +26,14 @@ class ENA(DataSource):
     }
 
 
-    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger) -> None:
+    def __init__(self, tmpdir: str, logger: logging.Logger) -> None:
         """
         Initialize the ENA downloader object.
 
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
-        :param bindir: The binary directory path. Where the helper binaries tools are stored.
         :param logger: The logger object.
         """
-        super().__init__(tmpdir, bindir, logger, min_delay=0.35)
+        super().__init__(tmpdir, logger, min_delay=0.35)
 
 
     # --- ENA Job creations ---

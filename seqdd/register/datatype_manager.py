@@ -14,17 +14,15 @@ class DataTypeManager:
     """
     _datatypes: dict[str, DataContainer] = None
     
-    def __init__(self, logger: logging.Logger, tmpdir: str = '/tmp', bindir: str = 'bin') -> None:
+    def __init__(self, logger: logging.Logger, tmpdir: str = '/tmp') -> None:
         """
         Initializes the DataTypeManager object.
 
         :param logger: The logger object for logging messages.
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
-        :param bindir: The binary directory path. Where the helper binaries tools are stored.
         """
         self.logger = logger
         self.tmpdir = tmpdir
-        self.bindir = bindir
     
     def get_data_types(self) -> dict[str, DataContainer]:
         """
@@ -65,7 +63,7 @@ class DataTypeManager:
             # Detect the declared data source type of the data container and instantiate it
             data_source_cls = get_declared_source_type(data_container_cls)
             if data_source_cls.__name__ not in self._datasources:
-                self._datasources[data_source_cls.__name__] = data_source_cls(self.tmpdir, self.bindir, self.logger)
+                self._datasources[data_source_cls.__name__] = data_source_cls(self.tmpdir, self.logger)
             data_source = self._datasources[data_source_cls.__name__]
             # Instanciate the data container
             self._datatypes[data_container_cls.__name__.lower()] = data_container_cls(data_source, self.logger)

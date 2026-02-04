@@ -34,10 +34,9 @@ class TestEna(SeqddTest):
 
 
     def test_ena(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         self.assertEqual(type(ena), ENA)
         self.assertEqual(ena.tmp_dir, self.seqdd_tmp_dir)
-        self.assertEqual(ena.bin_dir, self.bin_dir)
         self.assertEqual(ena.logger, self.logger)
         self.assertEqual(ena.last_query, 0)
         self.assertEqual(ena.min_delay, 0.35)
@@ -45,14 +44,14 @@ class TestEna(SeqddTest):
 
 
     def test_src_delay_ready(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         self.assertTrue(ena.source_delay_ready())
         ena.last_query = time.time()
         self.assertFalse(ena.source_delay_ready())
 
 
     def test_wait_my_turn(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         self.assertFalse(ena.mutex.locked())
         ena.wait_my_turn()
         self.assertTrue(ena.mutex.locked())
@@ -60,7 +59,7 @@ class TestEna(SeqddTest):
 
 
     def test_jobs_from_accessions(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'GCA_003543015.1'
         datadir = os.path.join(self._tmp_dir.name, 'data')
         os.mkdir(datadir)
@@ -79,7 +78,7 @@ class TestEna(SeqddTest):
 
 
     def test_jobs_from_acc_data_exists(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'GCA_003543015.1'
         datadir = os.path.join(self._tmp_dir.name, 'data')
         os.mkdir(datadir)
@@ -95,7 +94,7 @@ class TestEna(SeqddTest):
                     ("ftp.sra.ebi.ac.uk/vol1/fastq/SRR288/SRR288080/SRR288080.fastq.gz", '3977ffc0b88f0dd8bbe2bd87aa8e66d8'),
                     ("ftp.sra.ebi.ac.uk/vol1/fastq/SRR000/SRR000078/SRR000078.fastq.gz", '0368c41da46aa510322b73f18d40452e')]
 
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'SRS000006'
         datadir = os.path.join(self._tmp_dir.name, 'data')
         os.mkdir(datadir)
@@ -122,7 +121,7 @@ class TestEna(SeqddTest):
 
 
     def test_jobs_from_assembly(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'GCA_003543015.1'
         outdir = os.path.join(self._tmp_dir.name, 'outdir')
         job_name = 'nimportnaoik'
@@ -141,7 +140,7 @@ class TestEna(SeqddTest):
 
 
     def test_move_and_clean_wo_md5(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc_dir = os.path.join(self._tmp_dir.name, 'acc_dir')
         out_dir = os.path.join(self._tmp_dir.name, 'out_dir')
         os.mkdir(acc_dir)
@@ -155,7 +154,7 @@ class TestEna(SeqddTest):
 
 
     def test_move_and_clean_w_bad_md5(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc_dir = os.path.join(self._tmp_dir.name, 'acc_dir')
         out_dir = os.path.join(self._tmp_dir.name, 'out_dir')
         os.mkdir(acc_dir)
@@ -177,7 +176,7 @@ class TestEna(SeqddTest):
 
 
     def test_move_and_clean_w_good_md5(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc_dir = os.path.join(self._tmp_dir.name, 'acc_dir')
         out_dir = os.path.join(self._tmp_dir.name, 'out_dir')
         os.mkdir(acc_dir)
@@ -192,7 +191,7 @@ class TestEna(SeqddTest):
 
 
     def test_filter_validate_accessions(self):
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         ena_valid_accessions_on_API_ori = ena.valid_accessions_on_API
 
         accs = ['GCA_003543015.1', 'GCA_00000000.BAD', 'GCA_00000000.99', 'SRS000006']
@@ -213,7 +212,7 @@ class TestEna(SeqddTest):
         # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.sources.ena.subprocess = Mock()
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_003543015.1']
         fake_curl_response = CompletedProcess(args=['fakecurl', 'https://www.ebi.ac.uk/ena/browser/api/xml/GCA_003543015.1?download=false&gzip=false&includeLinks=false'],
                                     returncode=0)
@@ -231,7 +230,7 @@ class TestEna(SeqddTest):
         # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.sources.ena.subprocess = Mock()
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_00000000.99']
         fake_curl_response = CompletedProcess(
             args=['fakecurl',
@@ -259,7 +258,7 @@ Accession(s) not found on ENA servers: {', '.join(accs)}"""
         # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.sources.ena.subprocess = Mock()
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_00000000.BAD']
         fake_curl_response = CompletedProcess(
             args=['fakecurl', 'https://www.ebi.ac.uk/ena/browser/api/xml/GCA_00000000.BAD?download=false&gzip=false&includeLinks=false'],
@@ -286,7 +285,7 @@ Accession(s) not found on ENA servers: {', '.join(accs)}"""
         # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.sources.ena.subprocess = Mock()
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_003543015.1', 'SRS000006']
         fake_curl_response = CompletedProcess(
             args=['fakecurl',
@@ -313,7 +312,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
         # valid_accesions_on_API use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         seqdd.register.sources.ena.subprocess = Mock()
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_003543015.1']
         fake_curl_response = CompletedProcess(args=['curl', 'https://no_where_fake_url.org'],
                                               returncode=6)
@@ -343,7 +342,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
             'GCA_004000535.1': 'Assembly',
             'ERA000000009': 'Submission',
             'ERX000000009': 'Experiment'}
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         for acc, exp_acc_type in accessions.items():
             with self.subTest(acc=acc):
                 got_acc_type = ena.validate_accession(acc)
@@ -406,7 +405,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
         # get_ena_ftp_url use subprocess to spawn a curl subprocess
         # we mock subprocess run to mimic the response of ENA
         # seqdd.register.data_sources.ena.subprocess = Mock()
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'GCA_003543015.1'
 
         with self.catch_log(log_name='seqdd') as log:
@@ -423,7 +422,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
         # we mock subprocess run to mimic the response of ENA
         # when fastq are available 2 calls to subprocess are performed
         # we cannot use a MagicMock
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR3258091'
         to_download = ena.get_ena_ftp_url(acc)
         self.assertEqual(len(to_download), 1)
@@ -439,7 +438,7 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
         # we cannot use a MagicMock
 
         # the first curl call return with non zero value
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00001.BAD'
         with self.catch_log(log_name='seqdd') as log:
             to_download = ena.get_ena_ftp_url(acc)
@@ -461,7 +460,7 @@ Answer: {err.decode().rstrip()}"""
         # we cannot use a MagicMock
 
         # the second curl call return with non zero value
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00002.BAD'
         with self.catch_log(log_name='seqdd') as log:
             to_download = ena.get_ena_ftp_url(acc)
@@ -484,7 +483,7 @@ Answer: {err.decode().rstrip()}"""
         # we cannot use a MagicMock
 
         # the second curl call return output with less than 2 lines
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00003.BAD'
         to_download = ena.get_ena_ftp_url(acc)
         self.assertListEqual(to_download, [])
@@ -498,7 +497,7 @@ Answer: {err.decode().rstrip()}"""
         # we cannot use a MagicMock
 
         # the second curl call return output with no fastq_ftp nor fastq_md5 in header
-        ena = ENA(self.seqdd_tmp_dir, self.bin_dir, self.logger)
+        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00004.BAD'
         with self.catch_log(log_name='seqdd') as log:
             to_download = ena.get_ena_ftp_url(acc)

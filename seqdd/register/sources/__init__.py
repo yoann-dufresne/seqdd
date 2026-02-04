@@ -12,16 +12,14 @@ class DataSource(metaclass=abc.ABCMeta):
 
     Attributes:
         tmpdir (str): The temporary directory path where to download data.
-        bindir (str): The binary directory path where needed local binaries are present.
         logger: The logger object for logging messages.
         mutex: A lock object to synch data awaiting.
         min_delay (float): The minimum delay between server queries in seconds.
         last_query (float): The timestamp of the last server query.
     """
 
-    def __init__(self, tmpdir: str, bindir: str, logger: logging.Logger, min_delay: float = 0) -> None:
+    def __init__(self, tmpdir: str, logger: logging.Logger, min_delay: float = 0) -> None:
         self.tmp_dir = tmpdir
-        self.bin_dir = bindir
         self.logger = logger
         self.mutex = Lock()
         self.last_query = 0
