@@ -76,6 +76,12 @@ All the register files are downloaded into the data directory
     seqdd export -o myregister.reg
 ```
 
+## Run the tests
+
+```bash
+    python3 -m coverage run --source=seqdd
+```
+
 
 # Tools description
 
