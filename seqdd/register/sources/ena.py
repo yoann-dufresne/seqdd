@@ -22,7 +22,6 @@ class ENA(DataSource):
         'Run': r'(E|D|S)RR[0-9]{6,}',
         'Experiment': r'(E|D|S)RX[0-9]{6,}',
         'Assembly': r'GCA_[0-9]{9}\.[0-9]+', # Assembly
-        'Reference': r'GCF_[0-9]{9}\.[0-9]+', # Currated ref assembly
         'Submission': r'(E|D|S)RA[0-9]{6,}'
     }
 
