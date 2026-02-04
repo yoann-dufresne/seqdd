@@ -67,7 +67,7 @@ class ENA(DataSource):
             makedirs(tmp_dir)
 
             # Check if the accession is an assembly and create jobs accordingly
-            if acc.startswith('GCA') or acc.startswith('GCF'):
+            if acc.startswith('GCA'):
                 jobs_from_assembly = self.jobs_from_assembly(acc, tmp_dir, datadir, job_name)
                 jobs.extend(jobs_from_assembly)
                 continue
