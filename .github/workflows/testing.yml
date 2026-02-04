@@ -5,6 +5,8 @@ on:
     branches: [ main, dev ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
   build:
@@ -17,9 +19,7 @@ jobs:
       - name: Check FTP file availability
         run: |
           set -e
-          curl --fail --silent --range 0-0 \
-            ftp://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt \
-            -o /dev/null
+          curl --fail --silent --range 0-0 ftp://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt -o /dev/null
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
