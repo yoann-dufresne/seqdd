@@ -1,7 +1,6 @@
 import logging
 from os import path, makedirs
 from shutil import rmtree
-import subprocess
 import time
 
 from seqdd.utils.scheduler import JobManager
