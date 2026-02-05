@@ -6,7 +6,6 @@ import subprocess
 
 from seqdd.register.sources import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
-from ...errors import DownloadError
 
 
 
@@ -116,9 +115,6 @@ class RefSeq(DataSource):
                     rmtree(tmp_dir)
                 makedirs(tmp_dir)
 
-                # Get file urls to download
-                urls = self.get_ena_ftp_url(acc)
-
                 # Creates a curl job for each URL
                 wget_job =CmdLineJob(
                     command_line=f'wget -r -np -nH --cut-dirs=6 -e robots=off -P {tmp_dir} "{ftp_path}/"',
@@ -146,13 +142,7 @@ class RefSeq(DataSource):
         :param accession_dir: The directory path containing the downloaded files.
         :param outdir: The output directory path. Where the expected files will be located.
         """
-        # Create the accession directory in the output directory
-        makedirs(outdir, exist_ok=True)
-
-        # Move the files to the output directory
-        s = path.join(accession_dir, item)
-        d = path.join(outdir, item)
-        move(s, d)
+        move(accession_dir, outdir)
 
         # Clean the directory
         rmtree(accession_dir)
