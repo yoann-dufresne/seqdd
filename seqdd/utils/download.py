@@ -21,13 +21,10 @@ class DownloadManager:
         :param register:
         :param src_manager:
         :param logger: The logger object.
-        :param bindir: The binary directory path. Where the helper binaries tools are stored.
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
         """
         # The sources register
         self.register = register
-        # The binary directory path. Where the helper binaries tools are stored.
-        self.bin_dir = datatype_manager.bindir
         # The temporary directory path. Where the downloaded intermediate files are located.
         self.tmp_dir = datatype_manager.tmpdir
         # The datatype manager to handle different data types
@@ -94,16 +91,16 @@ class DownloadManager:
 
 # -------------------- Utils downloads --------------------
 
-def check_binary(path_to_bin: str) -> bool:
-    """
-    Check if the binary is present and executable
+# def check_binary(path_to_bin: str) -> bool:
+#     """
+#     Check if the binary is present and executable
 
-    :param: path_to_bin Path to the binary
-    :return: True if the binary is present and executable. False otherwise.
-    """
-    try:
-        cmd = f'{path_to_bin} --version'
-        ret = subprocess.run(cmd.split(' '), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return ret.returncode == 0
-    except FileNotFoundError:
-        return False
+#     :param: path_to_bin Path to the binary
+#     :return: True if the binary is present and executable. False otherwise.
+#     """
+#     try:
+#         cmd = f'{path_to_bin} --version'
+#         ret = subprocess.run(cmd.split(' '), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+#         return ret.returncode == 0
+#     except FileNotFoundError:
+#         return False
