@@ -72,41 +72,37 @@ class Logan(DataContainer):
         :return: A list of jobs for downloading and processing Logan datasets.
         """
         jobs = []
-        accessions = self.data
 
-        # Checking already downloaded accessions
-        downloaded_accessions = frozenset(listdir(datadir))
+        # Files already downloaded by the UrlServer source, which prefixes them with 'url<idx>_'.
+        downloaded = frozenset(listdir(datadir))
 
-        self.logger.info(f'Creating jobs for {len(accessions) - len(downloaded_accessions)} Logan/SRA accessions')
+        # Resolve the accessions still to download
+        to_download = []
+        for acc in self.data:
+            srr, data_type = acc.split('_')
+
+            # Get the file name and URL from the accession
+            if data_type == 'unitigs':
+                filename = f'{srr}.unitigs.fa.zst'
+                url = f'https://s3.amazonaws.com/logan-pub/u/{srr}/{filename}'
+            else:
+                filename = f'{srr}.contigs.fa.zst'
+                url = f'https://s3.amazonaws.com/logan-pub/c/{srr}/{filename}'
+
+            # Skip already downloaded accessions (file is stored as 'url<idx>_<filename>')
+            if any(existing.endswith(filename) for existing in downloaded):
+                continue
+            to_download.append((acc, url))
+
+        self.logger.info(f'Creating jobs for {len(to_download)} Logan/SRA accessions')
 
         # Each dataset download is independent
-        for acc in accessions:
-            acc_dirname = f'logan_{acc}'
-            # Skip already downloaded accessions
-            if acc_dirname in downloaded_accessions:
-                continue
-            job_name = acc_dirname
-
-            print(acc)
-            acc, type = acc.split('_')
-
-            # Get the file name from the URL
-            filename = None
-            url = None
-            if type == 'unitigs':
-                filename = f'{acc}.unitigs.fa.zst'
-                url = f'https://s3.amazonaws.com/logan-pub/u/{acc}/{filename}'
-            else:
-                filename = f'{acc}.contigs.fa.zst'
-                url = f'https://s3.amazonaws.com/logan-pub/c/{acc}/{filename}'
-            # # Create the output file path
-            # output_file = path.join(tmp_dir, filename)
-            # Create the command line job
+        for acc, url in to_download:
             url_jobs = self.source.jobs_from_accessions([url], datadir)
             for job in url_jobs:
                 if job.name.startswith('url_'):
                     # Rename the job to the accession name
-                    job.name = f'{job_name}_download'
+                    job.name = f'logan_{acc}_download'
             jobs.extend(url_jobs)
 
         return jobs

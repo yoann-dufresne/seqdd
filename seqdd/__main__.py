@@ -81,7 +81,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     # Download entries from the register
     download = subparsers.add_parser('download',
                                      help='Download data from the register. '
-                                          'The download process needs sra-tools, ncbi command-line tools and wget.',
+                                          'The download process needs the curl, gzip and md5sum commands installed.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     download.add_argument('-d', '--download-directory',
                           default='data', help='Directory where all the data will be downloaded')
@@ -168,12 +168,13 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     reg = Register(logger, dirpath=args.register_location)
     src_types = reg.data_containers.keys() if args.type is None else [args.type]
-    to_remove = set(args.accessions)
     total_removed = 0
 
     for type in src_types:
         container = reg.data_containers[type]
         size = len(container)
+        # Each accession may be a regular expression: expand it to the matching accessions
+        to_remove = reg.filter_accessions(type, valid_regexp)
         container.remove_data(to_remove)
         removed = size - len(container)
         total_removed += removed
@@ -199,16 +200,19 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
             valid_regexp.append(regexp)
         except re.error:
             logger.warning(f"Invalid regular expression {regexp}. Not used for search.")
+    # No usable expression: fall back to matching everything
+    if not valid_regexp:
+        valid_regexp = ['']
 
     reg = Register(logger, dirpath=args.register_location)
-    for name, container in reg.data_containers.items():
-        if len(container) == 0:
+    src_types = reg.data_containers.keys() if args.type is None else [args.type]
+    for name in src_types:
+        matching = sorted(reg.filter_accessions(name, valid_regexp))
+        if len(matching) == 0:
             continue
         print(f"- {name}:")
-        data_list = list(container.data)
-        for idx in range(0, len(container), 5):
-            current_slice = data_list[idx:idx+5]
-            print("\t".join(current_slice))
+        for idx in range(0, len(matching), 5):
+            print("\t".join(matching[idx:idx+5]))
 
 
 def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:

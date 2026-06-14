@@ -23,7 +23,7 @@ class URL(DataContainer):
         :param datadir: The output directory path where the expected files will be located.
         :return: A list of jobs for downloading files.
         """
-        return self.source.jobs_from_accessions(self.data)
+        return self.source.jobs_from_accessions(self.data, datadir)
 
 
     

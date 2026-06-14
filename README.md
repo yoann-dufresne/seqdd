@@ -51,7 +51,7 @@ Creates a register of 3 datasets. The default location .register is used to stor
 ```bash
     seqdd init
     # If the init is ignored, seqdd will automatically create it inside of the current directory
-    seqdd add -t assembly -a GCA_000001635.9 GCA_003774525.2
+    seqdd add -t assemblies -a GCA_000001635.9 GCA_003774525.2
     seqdd add -t readarchives -a SRR000001
 ```
 
@@ -90,24 +90,24 @@ To specify a register directory, use the `--register-location` option before you
 
 General command line:
 ```
-    usage: seqdd [-h] [--register-location REGISTER_LOCATION] {init,add,download,export} ...
+    usage: seqdd [-h] {init,add,download,export,list,remove} ...
 
     Prepare a sequence dataset, download it and export .reg files for reproducibility.
 
     positional arguments:
-    {init,add,download,export}
+    {init,add,download,export,list,remove}
                             command to apply
         init                Initialise the data register
         add                 Add dataset(s) to manage
-        download            Download data from the register. The download process needs sra-tools, ncbi command-line tools and wget.
+        download            Download data from the register. The download process needs the curl, gzip and md5sum commands.
         export              Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.
+        list                List all the datasets from the register.
+        remove              Remove dataset(s) from the register
 
     options:
     -h, --help            show this help message and exit
-    --register-location REGISTER_LOCATION
-                            Directory that store all info for the register
 
-    Reproducibility is crutial, let's try to improve it!
+    Reproducibility is crucial, let's try to improve it!
 ```
 
 ## Init a a dataset register
@@ -148,10 +148,15 @@ Subcommand add:
                                 Directory that store all info for the register (default: .register)
 ```
 
-Example with ncbi genome accessions
+Example with assembly (GenBank GCA) and read archive accessions:
 ```bash
-    seqdd add --sources_ko ncbi --accessions ACCESSION1 ACCESSION2 --file-of-accessions accessions.txt
+    seqdd add --type assemblies --accessions GCA_000001635.9 GCA_003774525.2
+    seqdd add --type readarchives --file-of-accessions accessions.txt
 ```
+
+> Note: `add` validates every accession against its online source (ENA API for
+> assemblies and read archives, Logan S3 for logan), so it requires internet
+> access. Unreachable accessions are skipped with a warning.
 
 ## Download the dataset from an already setup register
 
