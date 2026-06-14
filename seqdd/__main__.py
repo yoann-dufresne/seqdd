@@ -81,7 +81,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     # Download entries from the register
     download = subparsers.add_parser('download',
                                      help='Download data from the register. '
-                                          'The download process needs sra-tools, ncbi command-line tools and wget.',
+                                          'The download process needs the curl, gzip and md5sum commands installed.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     download.add_argument('-d', '--download-directory',
                           default='data', help='Directory where all the data will be downloaded')
