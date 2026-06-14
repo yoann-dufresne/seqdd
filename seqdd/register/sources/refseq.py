@@ -8,37 +8,38 @@ from seqdd.register.sources import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
 
 
-
 class RefSeq(DataSource):
     """
-    The RefSeq class represents a data downloader for the RefSeq database.
+    The RefSeq class represents a data downloader for the NCBI RefSeq database.
+    Assemblies (GCF accessions) are resolved through the RefSeq assembly summary
+    index and downloaded from the NCBI FTP server.
     """
 
     index_file = {
         "ftp": "ftp://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt"
     }
 
-    # Regular expression for each type of ENA accession
+    # Regular expression for each type of RefSeq accession
     accession_patterns = {
         'Reference': r'GCF_[0-9]{9}\.[0-9]+'
     }
 
-
     def __init__(self, tmpdir: str, logger: logging.Logger) -> None:
         """
-        Initialize the ENA downloader object.
+        Initialize the RefSeq downloader object.
 
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
         :param logger: The logger object.
         """
         super().__init__(tmpdir, logger, min_delay=0.35)
         self.index_ready = False
-
+        self.index = {}
 
     def get_index(self) -> bool:
         """
-        Downloads de RefSeq assembly summary file from NCBI FTP server.
-        :returns: True if the index file was downloaded successfully, False otherwise.
+        Downloads the RefSeq assembly summary file from the NCBI FTP server and parses it.
+
+        :returns: True if the index file was downloaded and parsed successfully, False otherwise.
         """
         if self.index_ready:
             return True
@@ -48,35 +49,37 @@ class RefSeq(DataSource):
 
         self.logger.info('Downloading RefSeq assembly summary file')
 
-        # Download the index file
-        cmd = f"curl -s {index_url} > {index_path}"
-        curl_process = subprocess.run(
-            cmd.split(' '),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        # Download the index file (curl -o, no shell redirection)
+        cmd = ['curl', '-s', '-o', index_path, index_url]
+        curl_process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         if curl_process.returncode != 0:
-            self.logger.error(f'Error downloading RefSeq assembly summary file using command :\n{cmd}')
+            self.logger.error(f"Error downloading RefSeq assembly summary file using command:\n{' '.join(cmd)}")
             self.logger.error('RefSeq index file could not be downloaded. RefSeq downloads will not be possible.')
             return False
 
         self.logger.info('RefSeq assembly summary file downloaded successfully')
 
+        # Parse the index: map each assembly accession (column 1) to its FTP path (column 20).
+        # The file begins with '#' comment lines that must be skipped.
         self.index = {}
         with open(index_path, 'r') as index_file:
             for line in index_file:
-                split = line.strip().split('\t')
-                acc, ftp = split[0], split[19]
-                self.index[acc] = ftp
+                if line.startswith('#'):
+                    continue
+                split = line.rstrip('\n').split('\t')
+                if len(split) <= 19:
+                    continue
+                self.index[split[0]] = split[19]
 
+        self.index_ready = True
         return True
 
     # --- RefSeq Job creations ---
 
     def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
         """
-        Generates a list of jobs for downloading and processing RefSeq assemblies datasets.
+        Generates a list of jobs for downloading and processing RefSeq assembly datasets.
 
         :param accessions: A list of RefSeq accessions.
         :param datadir: The output directory path. Where the expected files will be located.
@@ -91,69 +94,64 @@ class RefSeq(DataSource):
         if len(to_download) == 0:
             self.logger.info(f'All {len(accessions)} RefSeq accessions are already downloaded')
             return jobs
-    
+
         # Download the index file if not already done
         if self.get_index() is False:
             return jobs
 
-        self.logger.info(f'Creating jobs for {len(accessions) - len(downloaded_accessions)} RefSeq accessions')
+        self.logger.info(f'Creating jobs for {len(to_download)} RefSeq accessions')
 
-        # Parse the index file to get the FTP paths
-        with open(path.join(self.tmp_dir, 'assembly_summary_refseq.txt'), 'r') as index_file:
-            for line in index_file:
-                split = line.strip().split('\t')
-                acc, ftp_path = split[0], split[19]
+        # Create the download jobs from the index (accession -> FTP path)
+        for acc in to_download:
+            ftp_path = self.index.get(acc)
+            if ftp_path is None:
+                self.logger.warning(f'Accession {acc} not found in RefSeq index. Skipping.')
+                continue
 
-                # Skip accessions that are not in the to_download set
-                if acc not in to_download:
-                    continue
+            job_name = f'refseq_{acc}'
+            # Reserve a temporary directory for the accession
+            tmp_dir = path.join(self.tmp_dir, acc)
+            if path.exists(tmp_dir):
+                rmtree(tmp_dir)
+            makedirs(tmp_dir)
 
-                job_name = f'refseq_{acc}'
-                # Reserve a temporary directory for the accession
-                tmp_dir = path.join(self.tmp_dir, acc)
-                if path.exists(tmp_dir):
-                    rmtree(tmp_dir)
-                makedirs(tmp_dir)
+            # Recursively download the assembly directory from the NCBI FTP server
+            wget_job = CmdLineJob(
+                command_line=f'wget -r -np -nH --cut-dirs=6 -e robots=off -P {tmp_dir} "{ftp_path}/"',
+                can_start=self.source_delay_ready,
+                name=f'{job_name}_wget'
+            )
+            jobs.append(wget_job)
 
-                # Creates a curl job for each URL
-                wget_job =CmdLineJob(
-                    command_line=f'wget -r -np -nH --cut-dirs=6 -e robots=off -P {tmp_dir} "{ftp_path}/"',
-                    can_start = self.source_delay_ready,
-                    name=f'{job_name}_wget'
-                )
-                jobs.append(wget_job)
-
-                # Create a function job to move the files to the final directory
-                jobs.append(FunctionJob(
-                    func_to_run = self.move_and_clean,
-                    func_args = (tmp_dir, path.join(datadir, acc)),
-                    parents = [wget_job],
-                    name=f'{job_name}_move'
-                ))
+            # Move the downloaded files to the final directory once wget is done
+            jobs.append(FunctionJob(
+                func_to_run=self.move_and_clean,
+                func_args=(tmp_dir, path.join(datadir, acc)),
+                parents=[wget_job],
+                name=f'{job_name}_move'
+            ))
 
         return jobs
 
-
     def move_and_clean(self, accession_dir: str, outdir: str) -> None:
         """
-        Moves the downloaded files from the accession directory to the output directory and cleans
-        up the temporary directory.
+        Moves the downloaded files from the accession directory to the output directory.
 
         :param accession_dir: The directory path containing the downloaded files.
         :param outdir: The output directory path. Where the expected files will be located.
         """
+        # shutil.move relocates the whole tree and removes the source directory,
+        # so no extra cleanup is needed afterwards.
         move(accession_dir, outdir)
-
-        # Clean the directory
-        rmtree(accession_dir)
 
     # --- RefSeq accession validity ---
 
     def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of RefSeq accessions and returns only the valid ones.
+
         :param accessions: A list of RefSeq accessions.
-        :returns: A list of valid RefSeq accessions.
+        :returns: A list of valid RefSeq accessions (correct format and present in the RefSeq index).
         """
         # Download the index file if not already done
         if self.get_index() is False:
@@ -163,8 +161,7 @@ class RefSeq(DataSource):
         valid_accessions = []
         for acc in accessions:
             # Pattern validation
-            acc_type = self.validate_accession(acc)
-            if acc_type  == 'Invalid':
+            if self.validate_accession(acc) == 'Invalid':
                 continue
 
             # Index validation
@@ -172,12 +169,9 @@ class RefSeq(DataSource):
                 self.logger.warning(f'Accession {acc} not found in RefSeq index')
                 continue
 
-            # Add to valid accessions
             valid_accessions.append(acc)
 
         return valid_accessions
-
-
 
     def validate_accession(self, accession: str) -> str:
         """
