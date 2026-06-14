@@ -99,7 +99,7 @@ General command line:
                             command to apply
         init                Initialise the data register
         add                 Add dataset(s) to manage
-        download            Download data from the register. The download process needs the curl, gzip and md5sum commands.
+        download            Download data from the register. The download process needs the curl, gzip, md5sum and wget commands.
         export              Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.
         list                List all the datasets from the register.
         remove              Remove dataset(s) from the register
@@ -131,11 +131,11 @@ Subcommand init:
 
 Subcommand add:
 ```
-    usage: seqdd add [-h] -t {assemblies,logan,readarchives,url} [-a ACCESSIONS [ACCESSIONS ...]] [-f FILE_OF_ACCESSIONS] [--tmp-directory TMP_DIRECTORY] [--unitigs] [--register-location REGISTER_LOCATION]
+    usage: seqdd add [-h] -t {assemblies,logan,readarchives,refseq,url} [-a ACCESSIONS [ACCESSIONS ...]] [-f FILE_OF_ACCESSIONS] [--tmp-directory TMP_DIRECTORY] [--unitigs] [--register-location REGISTER_LOCATION]
 
     options:
         -h, --help            show this help message and exit
-        -t {assemblies,logan,readarchives,url}, --type {assemblies,logan,readarchives,url}
+        -t {assemblies,logan,readarchives,refseq,url}, --type {assemblies,logan,readarchives,refseq,url}
                                 Downloadable data type. (default: None)
         -a ACCESSIONS [ACCESSIONS ...], --accessions ACCESSIONS [ACCESSIONS ...]
                                 List of accessions to register (default: [])
@@ -196,11 +196,11 @@ Subcommand export
 
 Subcommand remove:
 ```
-    usage: seqdd remove [-h] [-t {assemblies,logan,readarchives,url}] [-a ACCESSIONS [ACCESSIONS ...]] [--register-location REGISTER_LOCATION]
+    usage: seqdd remove [-h] [-t {assemblies,logan,readarchives,refseq,url}] [-a ACCESSIONS [ACCESSIONS ...]] [--register-location REGISTER_LOCATION]
 
     options:
         -h, --help            show this help message and exit
-        -t {assemblies,logan,readarchives,url}, --type {assemblies,logan,readarchives,url}
+        -t {assemblies,logan,readarchives,refseq,url}, --type {assemblies,logan,readarchives,refseq,url}
                                 Delete only from the given type. If not specified, removed from all the types. (default: None)
         -a ACCESSIONS [ACCESSIONS ...], --accessions ACCESSIONS [ACCESSIONS ...]
                                 List of accessions to remove from the register. Each accession can be a regular expression. (default: None)
@@ -212,12 +212,12 @@ Subcommand remove:
 
 Subcommand list:
 ```
-    usage: seqdd list [-h] [-t {assemblies,logan,readarchives,url}] [-r REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...]]
+    usage: seqdd list [-h] [-t {assemblies,logan,readarchives,refseq,url}] [-r REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...]]
                   [--register-location REGISTER_LOCATION]
 
     options:
         -h, --help            show this help message and exit
-        -t {assemblies,logan,readarchives,url}, --type {assemblies,logan,readarchives,url}
+        -t {assemblies,logan,readarchives,refseq,url}, --type {assemblies,logan,readarchives,refseq,url}
                                 List only the datasets from the given type. If not specified, list all the datasets. (default: None)
         -r REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...], --regular-expressions REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...]
                                 List only the datasets accessions that match at least one of the given regular expressions (default: [''])

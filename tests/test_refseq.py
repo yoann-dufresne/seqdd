@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 from seqdd.register.sources.refseq import RefSeq
+from seqdd.register.data_type.refseq import Refseq
+from seqdd.register.datatype_manager import DataTypeManager
 from tests import SeqddTest
 
 
@@ -113,4 +115,49 @@ class TestRefSeqSource(SeqddTest):
 
         valid = src.filter_valid(['GCF_000001215.4', 'GCF_999999999.9', 'GCA_000001215.4'])
 
+        self.assertEqual(valid, ['GCF_000001215.4'])
+
+
+class TestRefSeqContainer(SeqddTest):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.logger = logging.getLogger('seqdd')
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix='seqdd-refseq-')
+        self._data = tempfile.TemporaryDirectory(prefix='seqdd-refdata-')
+
+    def tearDown(self):
+        self._tmp.cleanup()
+        self._data.cleanup()
+
+    def _source(self):
+        src = RefSeq(self._tmp.name, self.logger)
+        src.index = {'GCF_000001215.4': 'ftp://server/path/GCF_000001215.4_dm6'}
+        src.index_ready = True
+        return src
+
+    def test_refseq_registered_as_datatype(self):
+        # The container must be auto-discovered as the `refseq` type, wired to a RefSeq source.
+        mng = DataTypeManager(self.logger)
+        types = mng.get_data_types()
+        self.assertIn('refseq', types)
+        self.assertIsInstance(types['refseq'].source, RefSeq)
+
+    def test_get_download_jobs_delegates_to_source(self):
+        container = Refseq(self._source(), self.logger)
+        container.add_data(['GCF_000001215.4'])
+
+        jobs = container.get_download_jobs(self._data.name)
+
+        self.assertTrue(any(j.name == 'refseq_GCF_000001215.4_wget' for j in jobs))
+
+    def test_filter_valid_keeps_well_formed_and_present(self):
+        container = Refseq(self._source(), self.logger)
+
+        valid = container.filter_valid(['GCF_000001215.4', 'GCF_999999999.9', 'not-a-gcf'])
+
+        # well-formed + present kept; well-formed but absent dropped by the source;
+        # malformed dropped by the container's pattern check
         self.assertEqual(valid, ['GCF_000001215.4'])
