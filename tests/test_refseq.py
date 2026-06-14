@@ -117,6 +117,22 @@ class TestRefSeqSource(SeqddTest):
 
         self.assertEqual(valid, ['GCF_000001215.4'])
 
+    def test_latest_genbank_equivalent_from_ena(self):
+        # The most recent GCA version is resolved from ENA (version-less query -> latest).
+        src = RefSeq(self._tmp.name, self.logger)
+        ena_xml = b'<ASSEMBLY_SET><ASSEMBLY accession="GCA_000001405.29" alias="GRCh38.p14"></ASSEMBLY></ASSEMBLY_SET>'
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=ena_xml, stderr=b'')):
+            gca = src.latest_genbank_equivalent('GCF_000001405.40')
+        self.assertEqual(gca, 'GCA_000001405.29')
+
+    def test_latest_genbank_equivalent_falls_back_to_index(self):
+        # If ENA cannot be queried, fall back to the GenBank assembly paired in the RefSeq index.
+        src = RefSeq(self._tmp.name, self.logger)
+        src.gca_index = {'GCF_000001215.4': 'GCA_000001215.4'}
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=1, stdout=b'', stderr=b'err')):
+            gca = src.latest_genbank_equivalent('GCF_000001215.4')
+        self.assertEqual(gca, 'GCA_000001215.4')
+
 
 class TestRefSeqContainer(SeqddTest):
 
@@ -156,8 +172,26 @@ class TestRefSeqContainer(SeqddTest):
     def test_filter_valid_keeps_well_formed_and_present(self):
         container = Refseq(self._source(), self.logger)
 
-        valid = container.filter_valid(['GCF_000001215.4', 'GCF_999999999.9', 'not-a-gcf'])
+        # The GenBank announcement queries ENA; mock it so the test stays offline.
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=1, stdout=b'', stderr=b'')):
+            valid = container.filter_valid(['GCF_000001215.4', 'GCF_999999999.9', 'not-a-gcf'])
 
         # well-formed + present kept; well-formed but absent dropped by the source;
         # malformed dropped by the container's pattern check
         self.assertEqual(valid, ['GCF_000001215.4'])
+
+    def test_filter_valid_announces_gca_on_stdout(self):
+        src = self._source()
+        src.gca_index = {'GCF_000001215.4': 'GCA_000001215.4'}
+        container = Refseq(src, self.logger)
+        ena_xml = b'<ASSEMBLY accession="GCA_000001215.4" alias="Release 6 plus ISO1 MT"></ASSEMBLY>'
+
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=ena_xml, stderr=b'')):
+            with self.catch_io(out=True) as (out, _err):
+                valid = container.filter_valid(['GCF_000001215.4'])
+        output = out.getvalue()
+
+        self.assertEqual(valid, ['GCF_000001215.4'])
+        self.assertIn('GCA_000001215.4', output)
+        self.assertIn('ENA', output)
+        self.assertIn('-t assemblies', output)

@@ -61,4 +61,25 @@ class Refseq(DataContainer):
                     f"Invalid accession format: {acc}. Expected format: {', '.join(Refseq.accession_patterns.values())}"
                 )
 
-        return self.source.filter_valid(valid_accessions)
+        valid_accessions = self.source.filter_valid(valid_accessions)
+        self.announce_genbank_equivalents(valid_accessions)
+        return valid_accessions
+
+    def announce_genbank_equivalents(self, accessions: list[str]) -> None:
+        """
+        Prints (on stdout) a notice that each RefSeq (GCF) accession is downloaded from NCBI and
+        that a sovereign GenBank (GCA) equivalent is available from ENA, suggesting the most recent
+        version so the user can choose the European source instead.
+
+        :param accessions: The valid RefSeq accessions being registered.
+        """
+        for acc in accessions:
+            gca = self.source.latest_genbank_equivalent(acc)
+            if gca is None:
+                continue
+            print(
+                f"[refseq] {acc} is downloaded from the NCBI servers. "
+                f"A GenBank-equivalent assembly is available from ENA (sovereign European servers): "
+                f"{gca} (most recent version). "
+                f"To use it instead: seqdd add -t assemblies -a {gca}"
+            )

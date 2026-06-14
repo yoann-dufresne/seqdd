@@ -34,6 +34,7 @@ class RefSeq(DataSource):
         super().__init__(tmpdir, logger, min_delay=0.35)
         self.index_ready = False
         self.index = {}
+        self.gca_index = {}
 
     def get_index(self) -> bool:
         """
@@ -60,9 +61,10 @@ class RefSeq(DataSource):
 
         self.logger.info('RefSeq assembly summary file downloaded successfully')
 
-        # Parse the index: map each assembly accession (column 1) to its FTP path (column 20).
-        # The file begins with '#' comment lines that must be skipped.
+        # Parse the index: per assembly accession (column 1), keep its FTP path (column 20) and
+        # its paired GenBank assembly (column 18). The file begins with '#' comment lines to skip.
         self.index = {}
+        self.gca_index = {}
         with open(index_path, 'r') as index_file:
             for line in index_file:
                 if line.startswith('#'):
@@ -71,6 +73,7 @@ class RefSeq(DataSource):
                 if len(split) <= 19:
                     continue
                 self.index[split[0]] = split[19]
+                self.gca_index[split[0]] = split[17]
 
         self.index_ready = True
         return True
@@ -185,3 +188,36 @@ class RefSeq(DataSource):
                 return accession_type
         self.logger.warning(f'Invalid accession: {accession}')
         return 'Invalid'
+
+    def latest_genbank_equivalent(self, accession: str) -> str | None:
+        """
+        Resolves the most recent GenBank (GCA) assembly equivalent to a RefSeq (GCF) accession,
+        as served by ENA (sovereign European servers). Falls back to the GenBank assembly paired
+        in the RefSeq index if ENA cannot be queried.
+
+        :param accession: A RefSeq (GCF) accession.
+        :returns: The most recent equivalent GCA accession, or None if it cannot be resolved.
+        """
+        # A GCF assembly and its GenBank counterpart share the same 9-digit core.
+        core = accession.split('_')[-1].split('.')[0]
+        url = f'https://www.ebi.ac.uk/ena/browser/api/xml/GCA_{core}'
+
+        self.wait_my_turn()
+        try:
+            response = subprocess.run(['curl', '-s', url], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+        except subprocess.TimeoutExpired:
+            response = None
+        finally:
+            self.end_my_turn()
+
+        if response is not None and response.returncode == 0:
+            matches = re.findall(r'accession="(GCA_[0-9]+)\.([0-9]+)"', response.stdout.decode())
+            if matches:
+                digits, version = max(matches, key=lambda m: int(m[1]))
+                return f'{digits}.{version}'
+
+        # Fallback: the GenBank assembly paired in the RefSeq index
+        paired = self.gca_index.get(accession)
+        if paired and paired.lower() != 'na':
+            return paired
+        return None
