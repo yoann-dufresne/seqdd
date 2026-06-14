@@ -168,12 +168,13 @@ def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     reg = Register(logger, dirpath=args.register_location)
     src_types = reg.data_containers.keys() if args.type is None else [args.type]
-    to_remove = set(args.accessions)
     total_removed = 0
 
     for type in src_types:
         container = reg.data_containers[type]
         size = len(container)
+        # Each accession may be a regular expression: expand it to the matching accessions
+        to_remove = reg.filter_accessions(type, valid_regexp)
         container.remove_data(to_remove)
         removed = size - len(container)
         total_removed += removed
