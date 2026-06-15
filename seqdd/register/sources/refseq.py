@@ -2,10 +2,11 @@ import logging
 from os import listdir, makedirs, path
 import re
 from shutil import rmtree, move
-import subprocess
 
 from seqdd.register.sources import DataSource
-from ...utils.scheduler import Job, CmdLineJob, FunctionJob
+from ...utils.scheduler import Job, FunctionJob
+from ...utils import net
+from ...errors import DownloadError
 
 
 class RefSeq(DataSource):
@@ -14,8 +15,6 @@ class RefSeq(DataSource):
     Assemblies (GCF accessions) are resolved through the RefSeq assembly summary
     index and downloaded from the NCBI FTP server.
     """
-
-    required_binaries = frozenset({'curl', 'wget'})
 
     index_file = {
         "ftp": "ftp://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt"
@@ -49,15 +48,15 @@ class RefSeq(DataSource):
 
         index_url = self.index_file['ftp']
         index_path = path.join(self.tmp_dir, 'assembly_summary_refseq.txt')
+        makedirs(self.tmp_dir, exist_ok=True)
 
         self.logger.info('Downloading RefSeq assembly summary file')
 
-        # Download the index file (curl -o, no shell redirection)
-        cmd = ['curl', '-s', '-o', index_path, index_url]
-        curl_process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        if curl_process.returncode != 0:
-            self.logger.error(f"Error downloading RefSeq assembly summary file using command:\n{' '.join(cmd)}")
+        # Download the index file with the pure-Python network layer (FTP via ftplib)
+        try:
+            net.download_file(index_url, index_path, resume=False)
+        except DownloadError as err:
+            self.logger.error(f'Error downloading RefSeq assembly summary file from {index_url}: {err}')
             self.logger.error('RefSeq index file could not be downloaded. RefSeq downloads will not be possible.')
             return False
 
@@ -120,34 +119,24 @@ class RefSeq(DataSource):
                 rmtree(tmp_dir)
             makedirs(tmp_dir)
 
-            # Recursively download the assembly directory from the NCBI FTP server
-            wget_job = CmdLineJob(
-                command_line=f'wget -r -np -nH --cut-dirs=6 -e robots=off --tries=3 -c -P {tmp_dir} "{ftp_path}/"',
+            # Recursively download the assembly directory from the NCBI FTP server (pure Python)
+            download_job = FunctionJob(
+                func_to_run=net.download_ftp_dir,
+                func_args=(f'{ftp_path}/', tmp_dir),
                 can_start=self.source_delay_ready,
-                name=f'{job_name}_wget'
+                name=f'{job_name}_download'
             )
-            jobs.append(wget_job)
+            jobs.append(download_job)
 
-            # Move the downloaded files to the final directory once wget is done
+            # Move the downloaded files to the final directory once the download is done
             jobs.append(FunctionJob(
-                func_to_run=self.move_and_clean,
+                func_to_run=move_and_clean,
                 func_args=(tmp_dir, path.join(datadir, acc)),
-                parents=[wget_job],
+                parents=[download_job],
                 name=f'{job_name}_move'
             ))
 
         return jobs
-
-    def move_and_clean(self, accession_dir: str, outdir: str) -> None:
-        """
-        Moves the downloaded files from the accession directory to the output directory.
-
-        :param accession_dir: The directory path containing the downloaded files.
-        :param outdir: The output directory path. Where the expected files will be located.
-        """
-        # shutil.move relocates the whole tree and removes the source directory,
-        # so no extra cleanup is needed afterwards.
-        move(accession_dir, outdir)
 
     # --- RefSeq accession validity ---
 
@@ -206,14 +195,14 @@ class RefSeq(DataSource):
 
         self.wait_my_turn()
         try:
-            response = subprocess.run(['curl', '-s', url], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
-        except subprocess.TimeoutExpired:
+            response = net.http_get_text(url)
+        except DownloadError:
             response = None
         finally:
             self.end_my_turn()
 
-        if response is not None and response.returncode == 0:
-            matches = re.findall(r'accession="(GCA_[0-9]+)\.([0-9]+)"', response.stdout.decode())
+        if response is not None:
+            matches = re.findall(r'accession="(GCA_[0-9]+)\.([0-9]+)"', response)
             if matches:
                 digits, version = max(matches, key=lambda m: int(m[1]))
                 return f'{digits}.{version}'
@@ -223,3 +212,18 @@ class RefSeq(DataSource):
         if paired and paired.lower() != 'na':
             return paired
         return None
+
+
+def move_and_clean(accession_dir: str, outdir: str) -> None:
+    """
+    Moves the downloaded files from the accession directory to the output directory.
+
+    Defined at module level (not as a method) so it stays picklable as a ``FunctionJob`` target
+    under the ``spawn`` multiprocessing start method (Windows/macOS).
+
+    :param accession_dir: The directory path containing the downloaded files.
+    :param outdir: The output directory path. Where the expected files will be located.
+    """
+    # shutil.move relocates the whole tree and removes the source directory,
+    # so no extra cleanup is needed afterwards.
+    move(accession_dir, outdir)

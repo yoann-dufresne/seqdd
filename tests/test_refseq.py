@@ -1,10 +1,10 @@
 import logging
 import os
 import tempfile
-from types import SimpleNamespace
 from unittest import mock
 
-from seqdd.register.sources.refseq import RefSeq
+from seqdd.errors import DownloadError
+from seqdd.register.sources.refseq import RefSeq, move_and_clean
 from seqdd.register.data_type.refseq import Refseq
 from seqdd.register.datatype_manager import DataTypeManager
 from tests import SeqddTest
@@ -50,7 +50,8 @@ class TestRefSeqSource(SeqddTest):
         # index must be cached (index_ready) to avoid re-downloading.
         src = RefSeq(self._tmp.name, self.logger)
         self._write_index()
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'', stderr=b'')):
+        # download_file is mocked out: the index file is already on disk, only parsing is tested.
+        with mock.patch('seqdd.utils.net.download_file'):
             ok = src.get_index()
         self.assertTrue(ok)
         self.assertTrue(src.index_ready)
@@ -58,7 +59,7 @@ class TestRefSeqSource(SeqddTest):
 
     def test_get_index_download_failure(self):
         src = RefSeq(self._tmp.name, self.logger)
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=1, stdout=b'', stderr=b'boom')):
+        with mock.patch('seqdd.utils.net.download_file', side_effect=DownloadError('boom')):
             ok = src.get_index()
         self.assertFalse(ok)
         self.assertFalse(src.index_ready)
@@ -66,14 +67,13 @@ class TestRefSeqSource(SeqddTest):
     def test_move_and_clean_moves_tree(self):
         # move_and_clean must relocate the whole tree without raising (the source dir is
         # consumed by the move, so no extra cleanup must be attempted).
-        src = RefSeq(self._tmp.name, self.logger)
         acc_dir = os.path.join(self._tmp.name, 'acc_src')
         os.makedirs(acc_dir)
         with open(os.path.join(acc_dir, 'genome.fna.gz'), 'w') as f:
             f.write('data')
         outdir = os.path.join(self._data.name, 'GCF_000001215.4')
 
-        src.move_and_clean(acc_dir, outdir)
+        move_and_clean(acc_dir, outdir)
 
         self.assertTrue(os.path.isfile(os.path.join(outdir, 'genome.fna.gz')))
         self.assertFalse(os.path.exists(acc_dir))
@@ -86,11 +86,11 @@ class TestRefSeqSource(SeqddTest):
         jobs = src.jobs_from_accessions(['GCF_000001215.4', 'GCF_999999999.9'], self._data.name)
         names = [j.name for j in jobs]
 
-        self.assertIn('refseq_GCF_000001215.4_wget', names)
+        self.assertIn('refseq_GCF_000001215.4_download', names)
         self.assertIn('refseq_GCF_000001215.4_move', names)
         self.assertFalse(any('999999999' in n for n in names))
-        wget = next(j for j in jobs if j.name.endswith('_wget'))
-        self.assertIn('ftp://server/path/GCF_000001215.4_dm6', wget.cmd)
+        download = next(j for j in jobs if j.name.endswith('_download'))
+        self.assertIn('ftp://server/path/GCF_000001215.4_dm6', download.args[0])
 
     def test_jobs_skips_already_downloaded(self):
         src = RefSeq(self._tmp.name, self.logger)
@@ -120,8 +120,8 @@ class TestRefSeqSource(SeqddTest):
     def test_latest_genbank_equivalent_from_ena(self):
         # The most recent GCA version is resolved from ENA (version-less query -> latest).
         src = RefSeq(self._tmp.name, self.logger)
-        ena_xml = b'<ASSEMBLY_SET><ASSEMBLY accession="GCA_000001405.29" alias="GRCh38.p14"></ASSEMBLY></ASSEMBLY_SET>'
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=ena_xml, stderr=b'')):
+        ena_xml = '<ASSEMBLY_SET><ASSEMBLY accession="GCA_000001405.29" alias="GRCh38.p14"></ASSEMBLY></ASSEMBLY_SET>'
+        with mock.patch('seqdd.utils.net.http_get_text', return_value=ena_xml):
             gca = src.latest_genbank_equivalent('GCF_000001405.40')
         self.assertEqual(gca, 'GCA_000001405.29')
 
@@ -129,7 +129,7 @@ class TestRefSeqSource(SeqddTest):
         # If ENA cannot be queried, fall back to the GenBank assembly paired in the RefSeq index.
         src = RefSeq(self._tmp.name, self.logger)
         src.gca_index = {'GCF_000001215.4': 'GCA_000001215.4'}
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=1, stdout=b'', stderr=b'err')):
+        with mock.patch('seqdd.utils.net.http_get_text', side_effect=DownloadError('err')):
             gca = src.latest_genbank_equivalent('GCF_000001215.4')
         self.assertEqual(gca, 'GCA_000001215.4')
 
@@ -167,13 +167,13 @@ class TestRefSeqContainer(SeqddTest):
 
         jobs = container.get_download_jobs(self._data.name)
 
-        self.assertTrue(any(j.name == 'refseq_GCF_000001215.4_wget' for j in jobs))
+        self.assertTrue(any(j.name == 'refseq_GCF_000001215.4_download' for j in jobs))
 
     def test_filter_valid_keeps_well_formed_and_present(self):
         container = Refseq(self._source(), self.logger)
 
         # The GenBank announcement queries ENA; mock it so the test stays offline.
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=1, stdout=b'', stderr=b'')):
+        with mock.patch('seqdd.utils.net.http_get_text', side_effect=DownloadError('offline')):
             valid = container.filter_valid(['GCF_000001215.4', 'GCF_999999999.9', 'not-a-gcf'])
 
         # well-formed + present kept; well-formed but absent dropped by the source;
@@ -184,9 +184,9 @@ class TestRefSeqContainer(SeqddTest):
         src = self._source()
         src.gca_index = {'GCF_000001215.4': 'GCA_000001215.4'}
         container = Refseq(src, self.logger)
-        ena_xml = b'<ASSEMBLY accession="GCA_000001215.4" alias="Release 6 plus ISO1 MT"></ASSEMBLY>'
+        ena_xml = '<ASSEMBLY accession="GCA_000001215.4" alias="Release 6 plus ISO1 MT"></ASSEMBLY>'
 
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=ena_xml, stderr=b'')):
+        with mock.patch('seqdd.utils.net.http_get_text', return_value=ena_xml):
             with self.catch_io(out=True) as (out, _err):
                 valid = container.filter_valid(['GCF_000001215.4'])
         output = out.getvalue()
