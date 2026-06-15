@@ -131,11 +131,11 @@ Subcommand init:
 
 Subcommand add:
 ```
-    usage: seqdd add [-h] -t {assemblies,logan,readarchives,refseq,url} [-a ACCESSIONS [ACCESSIONS ...]] [-f FILE_OF_ACCESSIONS] [--tmp-directory TMP_DIRECTORY] [--unitigs] [--register-location REGISTER_LOCATION]
+    usage: seqdd add [-h] -t {assemblies,logan,readarchives,refseq,sequences,url} [-a ACCESSIONS [ACCESSIONS ...]] [-f FILE_OF_ACCESSIONS] [--tmp-directory TMP_DIRECTORY] [--unitigs] [--register-location REGISTER_LOCATION]
 
     options:
         -h, --help            show this help message and exit
-        -t {assemblies,logan,readarchives,refseq,url}, --type {assemblies,logan,readarchives,refseq,url}
+        -t {assemblies,logan,readarchives,refseq,sequences,url}, --type {assemblies,logan,readarchives,refseq,sequences,url}
                                 Downloadable data type. (default: None)
         -a ACCESSIONS [ACCESSIONS ...], --accessions ACCESSIONS [ACCESSIONS ...]
                                 List of accessions to register (default: [])
@@ -152,6 +152,7 @@ Example with assembly (GenBank GCA) and read archive accessions:
 ```bash
     seqdd add --type assemblies --accessions GCA_000001635.9 GCA_003774525.2
     seqdd add --type readarchives --file-of-accessions accessions.txt
+    seqdd add --type sequences --accessions U00096.3 MN908947
 ```
 
 > Note: `add` validates every accession against its online source (ENA API for
@@ -196,11 +197,11 @@ Subcommand export
 
 Subcommand remove:
 ```
-    usage: seqdd remove [-h] [-t {assemblies,logan,readarchives,refseq,url}] [-a ACCESSIONS [ACCESSIONS ...]] [--register-location REGISTER_LOCATION]
+    usage: seqdd remove [-h] [-t {assemblies,logan,readarchives,refseq,sequences,url}] [-a ACCESSIONS [ACCESSIONS ...]] [--register-location REGISTER_LOCATION]
 
     options:
         -h, --help            show this help message and exit
-        -t {assemblies,logan,readarchives,refseq,url}, --type {assemblies,logan,readarchives,refseq,url}
+        -t {assemblies,logan,readarchives,refseq,sequences,url}, --type {assemblies,logan,readarchives,refseq,sequences,url}
                                 Delete only from the given type. If not specified, removed from all the types. (default: None)
         -a ACCESSIONS [ACCESSIONS ...], --accessions ACCESSIONS [ACCESSIONS ...]
                                 List of accessions to remove from the register. Each accession can be a regular expression. (default: None)
@@ -212,12 +213,12 @@ Subcommand remove:
 
 Subcommand list:
 ```
-    usage: seqdd list [-h] [-t {assemblies,logan,readarchives,refseq,url}] [-r REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...]]
+    usage: seqdd list [-h] [-t {assemblies,logan,readarchives,refseq,sequences,url}] [-r REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...]]
                   [--register-location REGISTER_LOCATION]
 
     options:
         -h, --help            show this help message and exit
-        -t {assemblies,logan,readarchives,refseq,url}, --type {assemblies,logan,readarchives,refseq,url}
+        -t {assemblies,logan,readarchives,refseq,sequences,url}, --type {assemblies,logan,readarchives,refseq,sequences,url}
                                 List only the datasets from the given type. If not specified, list all the datasets. (default: None)
         -r REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...], --regular-expressions REGULAR_EXPRESSIONS [REGULAR_EXPRESSIONS ...]
                                 List only the datasets accessions that match at least one of the given regular expressions (default: [''])

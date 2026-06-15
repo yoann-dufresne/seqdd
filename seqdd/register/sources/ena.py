@@ -104,8 +104,46 @@ class ENA(DataSource):
         return jobs
 
 
-    def jobs_from_assembly(self, assembly: str, tmpdir: str, outdir: str, job_name: str) \
-            -> list[Job]:
+    def _fasta_record_jobs(self, accession: str, tmpdir: str, outdir: str, job_name: str) -> list[Job]:
+        """
+        Creates the jobs to download a single FASTA record (an assembly or a sequence) from the
+        ENA browser API: curl the FASTA, gzip it, then move it to the output directory.
+
+        :param accession: The ENA accession to download.
+        :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
+        :param outdir: The output directory path. Where the expected files will be located.
+        :param job_name: The base name of the jobs.
+        :return: A list of jobs [curl, gzip, move].
+        """
+        # Get the record URL
+        url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{accession}'
+        # Create the output file path
+        output_file = path.join(tmpdir, f'{accession}.fa')
+
+        # Create the command line job
+        curl_job = CmdLineJob(
+            command_line=f'curl -o {output_file} "{url}"',
+            can_start=self.source_delay_ready,
+            name=f'{job_name}_download'
+        )
+        # Create a compression job
+        gzip_job = CmdLineJob(
+            command_line=f'gzip {output_file}',
+            parents=[curl_job],
+            name=f'{job_name}_gzip'
+        )
+        # Create a function job to move the files to the final directory
+        move_job = FunctionJob(
+            func_to_run=self.move_and_clean,
+            func_args=(tmpdir, outdir),
+            parents=[gzip_job],
+            name=f'{job_name}_move'
+        )
+
+        return [curl_job, gzip_job, move_job]
+
+
+    def jobs_from_assembly(self, assembly: str, tmpdir: str, outdir: str, job_name: str) -> list[Job]:
         """
         Creates a list of jobs for downloading and processing an assembly.
 
@@ -115,33 +153,76 @@ class ENA(DataSource):
         :param job_name: The name of the job.
         :return: A list of jobs for downloading and processing an assembly.
         """
-        # Get the assembly URL
-        url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{assembly}'
-        # Create the output file path
-        output_file = path.join(tmpdir, f'{assembly}.fa')
+        return self._fasta_record_jobs(assembly, tmpdir, outdir, f'{job_name}_{assembly}')
 
-        # Create the command line job
-        curl_job = CmdLineJob(
-            command_line=f'curl -o {output_file} "{url}"',
-            can_start=self.source_delay_ready,
-            name=f'{job_name}_{assembly}_download'
-        )
-        # Create a compression job
-        gzip_job = CmdLineJob(
-            command_line=f'gzip {output_file}',
-            parents=[curl_job],
-            name=f'{job_name}_{assembly}_gzip'
-        )
 
-        # Create a function job to move the files to the final directory
-        move_job = FunctionJob(
-            func_to_run=self.move_and_clean,
-            func_args=(tmpdir, outdir),
-            parents=[gzip_job],
-            name=f'{job_name}_{assembly}_move'
-        )
+    def jobs_from_sequences(self, accessions: list[str], datadir: str) -> list[Job]:
+        """
+        Generates a list of jobs for downloading individual nucleotide sequence records
+        (GenBank/EMBL/ENA accessions) as FASTA from the ENA browser API.
 
-        return [curl_job, gzip_job, move_job]
+        :param accessions: A list of ENA sequence accessions.
+        :param datadir: The output directory path. Where the expected files will be located.
+        :returns: A list of jobs for downloading and processing the sequence records.
+        """
+        jobs = []
+
+        # Checking already downloaded accessions
+        downloaded_accessions = frozenset(listdir(datadir))
+        to_download = frozenset(accessions) - downloaded_accessions
+
+        self.logger.info(f'Creating jobs for {len(to_download)} ENA sequence accessions')
+
+        # Each record download is independent
+        for acc in accessions:
+            # Skip already downloaded accessions
+            if acc in downloaded_accessions:
+                continue
+
+            job_name = f'ena_{acc}'
+            # Create a temporary directory for the accession
+            tmp_dir = path.join(self.tmp_dir, acc)
+            if path.exists(tmp_dir):
+                rmtree(tmp_dir)
+            makedirs(tmp_dir)
+
+            jobs.extend(self._fasta_record_jobs(acc, tmp_dir, datadir, job_name))
+
+        return jobs
+
+
+    def valid_sequence_accessions(self, accessions: list[str]) -> list[str]:
+        """
+        Returns the accessions available as FASTA sequence records on ENA.
+
+        The ENA xml endpoint does not serve the SEQUENCE data type (it answers HTTP 400), so
+        existence is checked with a HEAD request against the FASTA endpoint that is actually used
+        for the download.
+
+        :param accessions: A list of candidate sequence accessions.
+        :returns: The subset that ENA serves (HTTP 200 on the FASTA endpoint).
+        """
+        valid_accessions = []
+        for acc in accessions:
+            url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{acc}'
+            self.wait_my_turn()
+            try:
+                response = subprocess.run(
+                    ['curl', '-s', '-I', '-o', '/dev/null', '-w', '%{http_code}', url],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15
+                )
+            except subprocess.TimeoutExpired:
+                self.end_my_turn()
+                self.logger.error(f'Timeout querying ENA for accession {acc}')
+                continue
+            self.end_my_turn()
+
+            if response.returncode == 0 and response.stdout.decode().strip() == '200':
+                valid_accessions.append(acc)
+            else:
+                self.logger.warning(f'Sequence accession not found on ENA servers: {acc}')
+
+        return valid_accessions
 
 
     def move_and_clean(self, accession_dir: str, outdir: str, md5s: dict[str, str] | None = None) -> None:
