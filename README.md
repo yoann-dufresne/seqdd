@@ -34,6 +34,13 @@ In all these cases, creating a local registry and exporting it for your users gr
 
 # Install the tool
 
+SeqDD is a pure-Python tool. It runs on **Linux, macOS and Windows** and its only third-party
+dependency is [`requests`](https://pypi.org/project/requests/) (installed automatically). No
+external command-line tool (`curl`, `wget`, `gzip`, `md5sum`, …) is required anymore.
+
+> Note: adding accessions (`seqdd add`) validates them against the online sources (ENA, NCBI, S3),
+> so it needs network access.
+
 ## From the sources
 
 ```bash
@@ -99,7 +106,7 @@ General command line:
                             command to apply
         init                Initialise the data register
         add                 Add dataset(s) to manage
-        download            Download data from the register. The download process needs the curl, gzip, md5sum and wget commands.
+        download            Download data from the register. Pure Python: no external command-line tool is required.
         export              Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.
         list                List all the datasets from the register.
         remove              Remove dataset(s) from the register

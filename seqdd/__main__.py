@@ -1,6 +1,5 @@
 import argparse
 import os
-import platform
 import re
 import logging
 import sys
@@ -10,7 +9,6 @@ from tempfile import gettempdir
 from .register.reg_manager import create_register, Register
 from .register.datatype_manager import DataTypeManager
 from .utils.download import DownloadManager
-from .utils.binaries import missing_binaries, required_binaries_for
 from .utils.manifest import verify_manifest, verify_against, load_manifest_file, MANIFEST_NAME
 
 
@@ -84,7 +82,7 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     # Download entries from the register
     download = subparsers.add_parser('download',
                                      help='Download data from the register. '
-                                          'The download process needs the curl, gzip, md5sum and wget commands installed.',
+                                          'Pure Python: no external command-line tool is required.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     download.add_argument('-d', '--download-directory',
                           default='data', help='Directory where all the data will be downloaded')
@@ -187,22 +185,6 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
         parser.error('--unitigs is only available for Logan source')
 
     return args
-
-
-def _ensure_binaries(required: list[str], logger: logging.Logger) -> None:
-    """
-    Exit with an error if any required external command-line tool is missing from the PATH.
-
-    :param required: The external executables needed for the current command.
-    :param logger: The object to log.
-    """
-    missing = missing_binaries(required)
-    if missing:
-        logger.critical(
-            f"Missing required tool(s): {', '.join(missing)}. "
-            "Please install them and make sure they are available in your PATH."
-        )
-        sys.exit(1)
 
 
 def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -362,9 +344,6 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     :param args: The parsed cmd line arguments
     :param logger: The object to log
     """
-    # Validating accessions queries the online sources, which requires curl.
-    _ensure_binaries(['curl'], logger)
-
     # Getting the file to the sources
     # src_path = os.path.join(args.register_location, f"{args.type}.txt")
     # bin_dir = os.path.join(args.register_location, 'bin')
@@ -412,8 +391,6 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
     # bindir = os.path.join(args.register_location, 'bin')
     datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
     reg = Register(logger, dirpath=args.register_location)
-    if not args.dry_run:
-        _ensure_binaries(required_binaries_for(reg), logger)
     dm = DownloadManager(reg, datatype_manager, logger)
     result = dm.download_to(args.download_directory, args.log_directory, args.max_processes,
                             dry_run=args.dry_run)
@@ -447,12 +424,6 @@ def main() -> None:
     """
     main entry point to seqdd
     """
-    # Platform check
-    system = platform.system()
-    if system == 'Windows':
-        print('Windows plateforms are not supported by seqdd.', file=sys.stderr)
-        exit(3)
-
     # Setup the logger
     logger = logging.getLogger('seqdd')
     logger.setLevel(logging.DEBUG)
