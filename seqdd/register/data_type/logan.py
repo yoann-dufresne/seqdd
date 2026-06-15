@@ -108,6 +108,10 @@ class Logan(DataContainer):
         return jobs
 
 
+    def downloaded_accessions(self, datadir: str) -> set[str] | None:
+        # Logan files are stored flat as 'url<idx>_<srr>.contigs.fa.zst', not one dir per accession.
+        return None
+
     def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given list of Logan/SRA accessions and returns only the valid ones.

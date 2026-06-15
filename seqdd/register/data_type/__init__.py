@@ -1,3 +1,4 @@
+from os import path
 from seqdd.register.sources import DataSource
 from seqdd.utils.scheduler import Job
 from abc import abstractmethod
@@ -42,9 +43,22 @@ class DataContainer:
     def __eq__(self, other):
         if not isinstance(other, type(self)):
             return False
-        
+
         return self.data == other.data
-        
+
+    def downloaded_accessions(self, datadir: str) -> set[str] | None:
+        """
+        Return the subset of this container's accessions already present in datadir.
+
+        The default implementation matches the ``<datadir>/<accession>/`` layout used by the
+        accession-keyed sources (ENA, RefSeq). Containers whose source stores files in a flat
+        layout (url, logan) cannot resolve presence per accession and override this to return None.
+
+        :param datadir: The data directory to inspect.
+        :return: The set of accessions found on disk, or None if presence is not tracked per accession.
+        """
+        return {acc for acc in self.data if path.isdir(path.join(datadir, acc))}
+
     @abstractmethod
     def get_download_jobs(self, datadir: str) -> list[Job]:
         """

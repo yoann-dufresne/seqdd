@@ -25,6 +25,10 @@ class URL(DataContainer):
         """
         return self.source.jobs_from_accessions(self.data, datadir)
 
+    def downloaded_accessions(self, datadir: str) -> set[str] | None:
+        # URLs are stored flat as 'url<idx>_<filename>', not one directory per accession.
+        return None
+
     def filter_valid(self, accessions: list[str]) -> list[str]:
         """
         Filters the given URLs, keeping only the reachable ones.
