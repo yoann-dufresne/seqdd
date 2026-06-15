@@ -32,3 +32,7 @@ jobs:
       - name: Test and Compute the code coverage
         run: coverage run --source=seqdd
         if: matrix.python-version == '3.12'
+      - name: functional tests
+        run: |
+          chmod +x tests/functional/main.sh
+          ./tests/functional/main.sh
