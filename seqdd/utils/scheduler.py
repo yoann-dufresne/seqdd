@@ -27,6 +27,10 @@ class JobManager(Thread):
         self.waiting = []
         self.running = []
         self.dependancies = {}
+        # Job outcome tracking (Job objects, identity-hashed)
+        self.completed_jobs = set()
+        self.failed_jobs = set()
+        self.canceled_jobs = set()
         # Logger
         self.max_process = max_process
         self.log_folder = path.abspath(log_folder) if log_folder is not None else None
@@ -63,13 +67,16 @@ class JobManager(Thread):
                     self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
                     self.logger.error(f'Please check the log file for more details: {job.log_file}')
                     notified = True
+                    self.failed_jobs.add(job)
                     self.cancel_job(job)
                 job.join()
                 if job.get_returncode() == 0:
+                    self.completed_jobs.add(job)
                     self.logger.info(f'DONE {job}')
                 elif not notified:
                     self.logger.error(f'ERROR {job}\n{job.get_returncode()}')
                     self.logger.error(f'Please check the log file for more details: {job.log_file}')
+                    self.failed_jobs.add(job)
 
             # Add new processes
             to_remove = []
@@ -102,21 +109,24 @@ class JobManager(Thread):
 
     def cancel_job(self, job: Job) -> None:
         """
+        Recursively cancel the whole descendance of a failed job. The failed job itself is left
+        untouched (it already finished with an error and has been accounted as failed).
 
-        :param job:
+        :param job: The job whose descendants must be canceled.
         """
-        self.logger.warning(f'CANCEL {job}')
-        # Cancel descendance
-        if job in self.dependancies:
-            for desc in self.dependancies[job]:
-                self.cancel_job(desc)
-
-        # cancel current job
-        if job in self.running:
-            self.running.remove(job)
-        if job in self.waiting:
-            self.waiting.remove(job)
-        job.stop()
+        for desc in self.dependancies.get(job, []):
+            # Skip jobs already finished or already canceled (e.g. shared dependencies)
+            if desc.is_over or desc in self.canceled_jobs:
+                continue
+            self.logger.warning(f'CANCEL {desc}')
+            self.canceled_jobs.add(desc)
+            if desc in self.running:
+                self.running.remove(desc)
+            if desc in self.waiting:
+                self.waiting.remove(desc)
+            desc.stop()
+            # Recurse to cancel the descendants of this descendant
+            self.cancel_job(desc)
 
 
     def add_job(self, process: Job):
