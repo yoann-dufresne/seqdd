@@ -5,15 +5,11 @@
     SeqDD is distributed under the terms of the GNU General Public License (GPLv3).
     See the COPYING file for details.
 
-.. _ena_api:
 
-*******
-ena API
-*******
+commands API reference
+======================
 
-Classes to handle data from the **E**\ uropean **N**\ ucleotide **A**\ rchive.
+Builders for the external download commands, with consistent retry/resume behavior.
 
-.. automodule:: seqdd.register.sources.ena
+.. automodule:: seqdd.utils.commands
    :members:
-   :private-members:
-   :special-members:

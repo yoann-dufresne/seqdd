@@ -90,12 +90,12 @@ To specify a register directory, use the `--register-location` option before you
 
 General command line:
 ```
-    usage: seqdd [-h] {init,add,download,export,list,remove} ...
+    usage: seqdd [-h] {init,add,download,export,list,remove,verify,status} ...
 
     Prepare a sequence dataset, download it and export .reg files for reproducibility.
 
     positional arguments:
-    {init,add,download,export,list,remove}
+    {init,add,download,export,list,remove,verify,status}
                             command to apply
         init                Initialise the data register
         add                 Add dataset(s) to manage
@@ -103,6 +103,8 @@ General command line:
         export              Export the metadata into a .reg file. This file can be loaded from other locations to download the exact same data.
         list                List all the datasets from the register.
         remove              Remove dataset(s) from the register
+        verify              Verify downloaded data against the provenance manifest (seqdd-lock.json).
+        status              Show which registered accessions are downloaded and which are missing.
 
     options:
     -h, --help            show this help message and exit
@@ -163,18 +165,32 @@ Example with assembly (GenBank GCA) and read archive accessions:
 
 Subcommand download
 ```
-    usage: seqdd download [-h] [-d DOWNLOAD_DIRECTORY] [-p MAX_PROCESSES]
+    usage: seqdd download [-h] [-d DOWNLOAD_DIRECTORY] [-p MAX_PROCESSES] [-r REGISTER_FILE] [-f]
+                          [--tmp-directory TMP_DIRECTORY] [--log-directory LOG_DIRECTORY] [--dry-run]
+                          [--register-location REGISTER_LOCATION]
 
     options:
     -h, --help            show this help message and exit
     -d DOWNLOAD_DIRECTORY, --download-directory DOWNLOAD_DIRECTORY
-                            Directory where all the data will be downloaded
+                            Directory where all the data will be downloaded (default: data)
     -p MAX_PROCESSES, --max-processes MAX_PROCESSES
-                            Maximum number of processes to run in parallel.
+                            Number of processes to run in parallel.
+    -r REGISTER_FILE, --register-file REGISTER_FILE
+                            Register file to import and download from.
+    -f, --force           Used only with --register-file. Force reconstruction of the local register.
+    --tmp-directory TMP_DIRECTORY
+                            Temporary directory to store and organize the downloaded files
+    --log-directory LOG_DIRECTORY
+                            Directory where all the logs will be stored (default: logs)
+    --dry-run             Show what would be downloaded without downloading anything.
 ```
+
+`download` exits with a non-zero status if any download fails or is canceled, and writes a
+provenance manifest (`seqdd-lock.json`) in the download directory once finished.
 
 ```bash
     seqdd download --download-directory my_data
+    seqdd download --dry-run            # preview without downloading
 ```
 
 ## Export the dataset metadata to a .reg file
@@ -224,4 +240,37 @@ Subcommand list:
                                 List only the datasets accessions that match at least one of the given regular expressions (default: [''])
         --register-location REGISTER_LOCATION
                                 Directory that store all info for the register (default: .register)
+```
+
+## Check the download status
+
+Show, per data type, which registered accessions are already downloaded and which are missing:
+
+```bash
+    seqdd status                       # uses the default data/ directory
+    seqdd status -t assemblies -d my_data
+```
+
+## Verify downloaded data
+
+After a download, SeqDD writes a provenance manifest `seqdd-lock.json` in the download directory,
+recording the SHA-256 of every file. `verify` re-hashes the data and reports any missing or
+corrupted file, exiting with a non-zero status if so:
+
+```bash
+    seqdd verify -d my_data
+```
+
+## Reproducible redistribution (lock file)
+
+To let someone reproduce *exactly* your dataset, ship the `.reg` together with the lock file:
+
+```bash
+    # Producer
+    seqdd download -d data
+    seqdd export -o mydataset.reg -d data --with-lock   # writes mydataset.reg + mydataset.lock.json
+
+    # Consumer
+    seqdd download -r mydataset.reg -d data
+    seqdd verify -d data -m mydataset.lock.json         # confirms a bit-for-bit identical dataset
 ```

@@ -5,16 +5,13 @@
     SeqDD is distributed under the terms of the GNU General Public License (GPLv3).
     See the COPYING file for details.
 
-.. _logan_api:
 
-=========
-Logan API
-=========
+manifest API reference
+======================
 
-Classes to handle the Assemblies made on top of SRA: *Logan*
+Provenance manifest (``seqdd-lock.json``): records the size and SHA-256 of every downloaded file,
+and verifies a data directory against a manifest.
 
-
-.. automodule:: seqdd.register.data_sources.logan
+.. automodule:: seqdd.utils.manifest
    :members:
    :private-members:
-   :special-members:

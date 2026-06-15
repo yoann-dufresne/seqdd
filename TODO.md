@@ -1,8 +1,19 @@
-* Yield jobs to start downloading from the beginning
-* Change the delay functions to hold an amount of query per second, not a fix delay
-* Add url support for s3
-* Add url support for gs
-* Support logan
-s3://logan-pub/u/SRR6246166/SRR6246166.unitigs.fa.zst
-https://s3.amazonaws.com/logan-pub/u/SRR6246166/SRR6246166.unitigs.fa.zst
-https://s3.amazonaws.com/logan-pub/c/SRR6246166/SRR6246166.contigs.fa.zst 
+# Roadmap / TODO
+
+> Short list of known follow-ups. Done items live in `CHANGELOG.md`.
+
+## Distribution (release)
+* Publish to PyPI (`pip install seqdd`).
+* Bioconda recipe.
+* Docker / Apptainer image bundling `curl`, `gzip`, `coreutils`, `wget`.
+* Zenodo DOI (wired through `CITATION.cff`).
+
+## Features
+* Rate limiting expressed as queries-per-second instead of a fixed delay.
+* Richer data: assembly companion files (GFF3 annotation, proteins), ENA metadata export,
+  `add` from an ENA Portal query.
+* Google Cloud Storage (`gs://`) URL support.
+
+## Documentation
+* Finish the Sphinx API reference (utils: binaries / checksum / manifest / commands).
+* User guide section on verifiable reproducibility (lock file + `verify`).

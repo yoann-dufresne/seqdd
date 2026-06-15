@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use SeqDD, please cite it as below."
+title: "SeqDD — Sequence Data Downloader"
+abstract: >-
+  A command-line tool to prepare, download and redistribute reproducible biological sequence
+  datasets from accession numbers, using portable register files and verifiable provenance manifests.
+type: software
+authors:
+  - family-names: Dufresne
+    given-names: Yoann
+    affiliation: "Institut Pasteur / Université de Lille"
+  - family-names: Néron
+    given-names: Bertrand
+    affiliation: "Institut Pasteur"
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/yoann-dufresne/seqdd"
+url: "https://github.com/yoann-dufresne/seqdd"
+keywords:
+  - bioinformatics
+  - reproducibility
+  - sequence data
+  - ENA
+  - dataset
+version: "0.1.0"
+date-released: "2026-06-15"

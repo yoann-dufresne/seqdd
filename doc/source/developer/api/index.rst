@@ -12,12 +12,14 @@ SeqDD API documentation
     :maxdepth: 2
 
     register/reg_manager
-    register/src_manager
+    register/datatype_manager
     register/data_sources/data_sources
     register/data_sources/ena
-    register/data_sources/ncbi
-    register/data_sources/sra
-    register/data_sources/url
-    register/data_sources/logan
+    register/data_sources/refseq
+    register/data_sources/url_server
     utils/download.rst
     utils/scheduler.rst
+    utils/manifest.rst
+    utils/checksum.rst
+    utils/binaries.rst
+    utils/commands.rst

@@ -5,16 +5,11 @@
     SeqDD is distributed under the terms of the GNU General Public License (GPLv3).
     See the COPYING file for details.
 
-.. _url_api:
 
-=======
-url API
-=======
+checksum API reference
+======================
 
-Classes to handle data from an *url*
+SHA-256 checksums computed with the standard library (no external binary).
 
-
-.. automodule:: seqdd.register.data_sources.url
+.. automodule:: seqdd.utils.checksum
    :members:
-   :private-members:
-   :special-members:
