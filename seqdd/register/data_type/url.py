@@ -19,11 +19,20 @@ class URL(DataContainer):
     def get_download_jobs(self, datadir: str) -> list[Job]:
         """
         Create a list of jobs for downloading files from the URLs.
-        
+
         :param datadir: The output directory path where the expected files will be located.
         :return: A list of jobs for downloading files.
         """
         return self.source.jobs_from_accessions(self.data, datadir)
+
+    def filter_valid(self, accessions: list[str]) -> list[str]:
+        """
+        Filters the given URLs, keeping only the reachable ones.
+
+        :param accessions: A list of URLs.
+        :return: A list of valid (reachable) URLs.
+        """
+        return self.source.filter_valid(accessions)
 
 
     

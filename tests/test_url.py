@@ -1,5 +1,6 @@
 import logging
 import tempfile
+from types import SimpleNamespace
 from unittest import mock
 
 from seqdd.register.data_type.url import URL
@@ -34,3 +35,25 @@ class TestURL(SeqddTest):
         self.assertEqual(len(jobs), 1)
         # The download command must write into the requested data directory.
         self.assertIn(self._data_dir.name, jobs[0].cmd)
+
+    def test_filter_valid_delegates_to_source(self):
+        # The URL container must delegate validation to its source; without this,
+        # `seqdd add -t url` crashes (the base DataContainer has no filter_valid).
+        source = UrlServer(self._tmp_dir.name, self.logger)
+        container = URL(source, self.logger)
+        with mock.patch.object(UrlServer, 'filter_valid', return_value=['http://example.com/f']) as m:
+            valid = container.filter_valid(['http://example.com/f'])
+        m.assert_called_once_with(['http://example.com/f'])
+        self.assertEqual(valid, ['http://example.com/f'])
+
+    def test_source_filter_valid_accepts_200_any_http_version(self):
+        source = UrlServer(self._tmp_dir.name, self.logger)
+        # HEAD returning code 200 (works for HTTP/1.1 and HTTP/2) keeps the URL.
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'200', stderr=b'')):
+            self.assertEqual(source.filter_valid(['https://x/y']), ['https://x/y'])
+        # A non-200 status drops it.
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'404', stderr=b'')):
+            self.assertEqual(source.filter_valid(['https://x/y']), [])
+        # A curl failure drops it.
+        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=7, stdout=b'', stderr=b'boom')):
+            self.assertEqual(source.filter_valid(['https://x/y']), [])

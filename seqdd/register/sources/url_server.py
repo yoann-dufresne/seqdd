@@ -83,26 +83,28 @@ class UrlServer(DataSource):
         """
         Filters the given list of urls and returns only the valid ones.
 
-        :param accessions: A list of URLs.
-        :return: A list of valid URLs.
+        :param urls: A list of URLs.
+        :return: A list of valid URLs (HTTP 200 on a HEAD request).
         """
         valid_accessions = []
 
         for url in urls:
-            print(f'Checking URL: {url}')
             # If a URL formater is provided, format the URL
             if self.urlformater:
                 url = self.urlformater(url)
-            # Check if the accession is valid
+            # Check the URL is reachable (HEAD -> HTTP status code, robust to HTTP/1.1 and HTTP/2)
             self.wait_my_turn()
-            response = subprocess.run(['curl', '-I', url], capture_output=True)
+            response = subprocess.run(
+                ['curl', '-s', '-I', '-o', '/dev/null', '-w', '%{http_code}', url],
+                capture_output=True
+            )
             self.end_my_turn()
-            
+
             # Check the response
             if response.returncode != 0:
                 self.logger.error(f'Error querying: {url}\nAnswer: {response.stderr.decode()}')
                 continue
-            elif not response.stdout.decode().startswith('HTTP/1.1 200'):
+            if response.stdout.decode().strip() != '200':
                 self.logger.warning(f'Not found: {url}')
                 continue
 
