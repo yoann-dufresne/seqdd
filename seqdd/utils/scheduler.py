@@ -244,6 +244,30 @@ class Job(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
 
+def _run_function_job(func: Callable, args: tuple[Any, ...], log_file: str) -> None:
+    """
+    Module-level entry point executed inside the ``FunctionJob`` subprocess.
+
+    It must stay at module level (and only receive picklable arguments) so the job is safe under
+    the ``spawn`` multiprocessing start method used on Windows and recent macOS.
+
+    :param func: The function to run.
+    :param args: The positional arguments to pass to ``func``.
+    :param log_file: The path of the file collecting the subprocess output.
+    """
+    with open(log_file, 'w') as fw:
+        sys.stdout = fw
+        sys.stderr = fw
+        print(f'Starting {func.__name__} with args {args}', file=fw)
+        try:
+            func(*args)
+            print(f'Finished {func.__name__} with args {args}', file=fw)
+        except Exception as e:
+            print(f'Error in {func.__name__} with args {args}', file=fw)
+            print(e, file=fw)
+            raise e
+
+
 class FunctionJob(Job):
     """
     A Job class that wrap a function to run in a subprocess.
@@ -253,8 +277,10 @@ class FunctionJob(Job):
                  parents: list[Job] = None, can_start: Callable = lambda:True,
                  name: str|None = None, log_file: str|None = None):
         """
-        :param func_to_run: The function to run inside the subprocess.
-        :param func_args: A tuple of arguments to give to the function to run
+        :param func_to_run: The function to run inside the subprocess. It must be importable at
+                            module level (picklable) for the ``spawn`` start method.
+        :param func_args: A tuple of arguments to give to the function to run. Each argument must
+                         be picklable (str, dict, …) for the ``spawn`` start method.
         :param parents: A list of parent jobs to wait before running this one.
         :param can_start: A function that is called when the job is ready and before starting it.
                          The function must return True when the job is allowed to start
@@ -264,31 +290,17 @@ class FunctionJob(Job):
         super().__init__(parents=parents, can_start=can_start, name=name, log_file=f'{name}.log')
         self.to_run = func_to_run
         self.args = func_args
-        self.process = Process(target=self.wrapping_function, args=())
-
-
-    def wrapping_function(self) -> None:
-        """
-
-        :return:
-        """
-        with open(self.log_file, 'w') as fw:
-            sys.stdout = fw
-            sys.stderr = fw
-            print(f'Starting {self.to_run.__name__} with args {self.args}', file=fw)
-            try:
-                self.to_run(*self.args)
-                print(f'Finished {self.to_run.__name__} with args {self.args}', file=fw)
-            except Exception as e:
-                print(f'Error in {self.to_run.__name__} with args {self.args}', file=fw)
-                print(e, file=fw)
-                raise e
 
 
     def start(self) -> None:
         """
-        Start this job (in a subprocess)
+        Start this job (in a subprocess).
+
+        The process targets the module-level :func:`_run_function_job` with only picklable
+        arguments, so nothing referencing this job (locks, the process itself, lambdas) is sent to
+        the child. This keeps the job working under the ``spawn`` start method (Windows/macOS).
         """
+        self.process = Process(target=_run_function_job, args=(self.to_run, self.args, self.log_file))
         self.process.start()
 
 
