@@ -1,21 +1,20 @@
 
 from os import path
-import subprocess
 from urllib.parse import urlparse
-from seqdd.utils.scheduler import CmdLineJob, Job
-from seqdd.utils.commands import curl_download
+from seqdd.utils.scheduler import FunctionJob, Job
+from seqdd.utils import net
 from seqdd.register.sources import DataSource
 
 class UrlServer(DataSource):
     """
     A Source of download from urls
     """
-    
+
     def __init__(self, tmpdir, logger, min_delay = 0, urlformater = None) -> None:
         super().__init__(tmpdir, logger, min_delay)
         self.urlformater = urlformater
-        
-    
+
+
     def set_urlformater(self, urlformater = None) -> None:
         """
         Set the URL formater function.
@@ -27,7 +26,7 @@ class UrlServer(DataSource):
         else:
             self.logger.warning('No URL formater provided or it is not callable. Using default behavior.')
             self.urlformater = None
-        
+
 
     def jobs_from_accessions(self, accessions: list[str], datadir: str) -> list[Job]:
         """
@@ -44,8 +43,12 @@ class UrlServer(DataSource):
             filepath = path.join(datadir, f'url{idx}_{filename}')
             job_name = f'url_{filename}'
 
-            jobs.append(CmdLineJob(curl_download(url, filepath, silent=False),
-                                   can_start=self.source_delay_ready, name=job_name))
+            jobs.append(FunctionJob(
+                func_to_run=net.download_file,
+                func_args=(url, filepath),
+                can_start=self.source_delay_ready,
+                name=job_name
+            ))
 
         return jobs
 
@@ -58,29 +61,21 @@ class UrlServer(DataSource):
         :return: The filename extracted from the URL.
         """
         self.wait_my_turn()
+        try:
+            status, headers = net.http_head_headers(url)
+        finally:
+            self.end_my_turn()
 
-        verif_cmd = f'curl -X GET url -I "{url}"'
-        res = subprocess.run(verif_cmd, shell=True, capture_output=True, text=True)
-        
-        self.end_my_turn()
+        # Prefer the filename advertised by the server (Content-Disposition header)
+        if status == 200:
+            disposition = headers.get('Content-Disposition', '')
+            if 'filename=' in disposition:
+                return disposition.split('filename=')[1].strip().strip('"')
 
-        filename = None
-        if res.returncode == 0:
-            for line in res.stdout.split('\n'):
-                if line.startswith('HTTP'):
-                    code = int(line.strip().split(' ')[1])
-                    if code != 200:
-                        break
-                if 'filename=' in line:
-                    filename = line.split("=")[1].strip().strip('"')
-                    return filename
+        # Fall back to the last path segment of the URL
+        url_parsed = urlparse(url)
+        return path.basename(url_parsed.path)
 
-        if filename is None:
-            url_parsed = urlparse(url)
-            filename = path.basename(url_parsed.path)
-
-        return filename
-    
     def filter_valid(self, urls: list[str]) -> list[str]:
         """
         Filters the given list of urls and returns only the valid ones.
@@ -96,21 +91,16 @@ class UrlServer(DataSource):
                 url = self.urlformater(url)
             # Check the URL is reachable (HEAD -> HTTP status code, robust to HTTP/1.1 and HTTP/2)
             self.wait_my_turn()
-            response = subprocess.run(
-                ['curl', '-s', '-I', '-o', '/dev/null', '-w', '%{http_code}', url],
-                capture_output=True
-            )
-            self.end_my_turn()
+            try:
+                status = net.http_status(url)
+            finally:
+                self.end_my_turn()
 
             # Check the response
-            if response.returncode != 0:
-                self.logger.error(f'Error querying: {url}\nAnswer: {response.stderr.decode()}')
-                continue
-            if response.stdout.decode().strip() != '200':
+            if status != 200:
                 self.logger.warning(f'Not found: {url}')
                 continue
 
             valid_accessions.append(url)
 
         return valid_accessions
-

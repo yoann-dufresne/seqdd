@@ -1,6 +1,5 @@
 import logging
 import tempfile
-from types import SimpleNamespace
 from unittest import mock
 
 from seqdd.register.data_type.url import URL
@@ -33,8 +32,10 @@ class TestURL(SeqddTest):
             jobs = container.get_download_jobs(self._data_dir.name)
 
         self.assertEqual(len(jobs), 1)
-        # The download command must write into the requested data directory.
-        self.assertIn(self._data_dir.name, jobs[0].cmd)
+        # The download job must write into the requested data directory.
+        url, filepath = jobs[0].args
+        self.assertEqual(url, 'http://example.com/file.fa')
+        self.assertIn(self._data_dir.name, filepath)
 
     def test_filter_valid_delegates_to_source(self):
         # The URL container must delegate validation to its source; without this,
@@ -48,12 +49,12 @@ class TestURL(SeqddTest):
 
     def test_source_filter_valid_accepts_200_any_http_version(self):
         source = UrlServer(self._tmp_dir.name, self.logger)
-        # HEAD returning code 200 (works for HTTP/1.1 and HTTP/2) keeps the URL.
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'200', stderr=b'')):
+        # A 200 status (works for HTTP/1.1 and HTTP/2) keeps the URL.
+        with mock.patch('seqdd.utils.net.http_status', return_value=200):
             self.assertEqual(source.filter_valid(['https://x/y']), ['https://x/y'])
         # A non-200 status drops it.
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'404', stderr=b'')):
+        with mock.patch('seqdd.utils.net.http_status', return_value=404):
             self.assertEqual(source.filter_valid(['https://x/y']), [])
-        # A curl failure drops it.
-        with mock.patch('subprocess.run', return_value=SimpleNamespace(returncode=7, stdout=b'', stderr=b'boom')):
+        # An unreachable host (status 0) drops it.
+        with mock.patch('seqdd.utils.net.http_status', return_value=0):
             self.assertEqual(source.filter_valid(['https://x/y']), [])
