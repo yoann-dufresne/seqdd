@@ -3,16 +3,38 @@ import tempfile
 import os
 import time
 from threading import Lock
-from subprocess import CompletedProcess
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from tests import SeqddTest
 
 from seqdd.errors import DownloadError
-import seqdd.register.sources.ena
-from seqdd.register.sources.ena import ENA
-from seqdd.utils.scheduler import CmdLineJob, FunctionJob
+from seqdd.register.sources.ena import ENA, move_and_clean
+from seqdd.utils.scheduler import FunctionJob
 
+
+# --- Mock helpers replacing the former curl subprocess calls ---
+
+_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+
+
+def _read_fixture(name):
+    with open(os.path.join(_DATA_DIR, name), encoding='utf-8') as f:
+        return f.read()
+
+
+def fake_ena_http_get_text(url):
+    """Stand-in for net.http_get_text dispatching on the ENA URL, backed by recorded fixtures."""
+    if '/ena/browser/api/xml/' in url:
+        acc = url.split('/xml/')[1].split('?')[0]
+        if acc == 'ERR00001.BAD':
+            raise DownloadError('xml endpoint unreachable')
+        return _read_fixture(f'subprocess_get_ena_ftp_url_{acc}.out')
+    if '/ena/portal/api/filereport?accession=' in url:
+        acc = url.split('accession=')[1].split('&')[0]
+        if acc == 'ERR00002.BAD':
+            raise DownloadError('filereport endpoint unreachable')
+        return _read_fixture(f'subprocess_get_ena_ftp_url_fastq_{acc}.out')
+    raise AssertionError(f'unexpected URL {url}')
 
 
 class TestEna(SeqddTest):
@@ -64,17 +86,14 @@ class TestEna(SeqddTest):
         datadir = os.path.join(self._tmp_dir.name, 'data')
         os.mkdir(datadir)
         jobs = ena.jobs_from_accessions([acc], datadir)
-        self.assertEqual(len(jobs), 3)
-        curl, gzip, clean = jobs
-        self.assertEqual(curl.name, f'ena_{acc}_{acc}_download')
-        self.assertEqual(gzip.name, f'ena_{acc}_{acc}_gzip')
+        self.assertEqual(len(jobs), 2)
+        download, clean = jobs
+        self.assertEqual(download.name, f'ena_{acc}_{acc}_download')
         self.assertEqual(clean.name, f'ena_{acc}_{acc}_move')
-        self.assertTrue(isinstance(curl, CmdLineJob))
-        self.assertTrue(isinstance(gzip, CmdLineJob))
+        self.assertTrue(isinstance(download, FunctionJob))
         self.assertTrue(isinstance(clean, FunctionJob))
-        self.assertEqual(curl.parents, [])
-        self.assertEqual(gzip.parents, [curl])
-        self.assertEqual(clean.parents, [gzip])
+        self.assertEqual(download.parents, [])
+        self.assertEqual(clean.parents, [download])
 
 
     def test_jobs_from_acc_data_exists(self):
@@ -110,9 +129,9 @@ class TestEna(SeqddTest):
         self.assertEqual(jobs[1].name, f'ena_{acc}_SRR288080.fastq.gz')
         self.assertEqual(jobs[2].name, f'ena_{acc}_SRR000078.fastq.gz')
         self.assertEqual(jobs[3].name, f'ena_{acc}_move')
-        self.assertTrue(isinstance(jobs[0], CmdLineJob))
-        self.assertTrue(isinstance(jobs[1], CmdLineJob))
-        self.assertTrue(isinstance(jobs[2], CmdLineJob))
+        self.assertTrue(isinstance(jobs[0], FunctionJob))
+        self.assertTrue(isinstance(jobs[1], FunctionJob))
+        self.assertTrue(isinstance(jobs[2], FunctionJob))
         self.assertTrue(isinstance(jobs[3], FunctionJob))
         self.assertEqual(jobs[0].parents, [])
         self.assertEqual(jobs[1].parents, [])
@@ -126,35 +145,30 @@ class TestEna(SeqddTest):
         outdir = os.path.join(self._tmp_dir.name, 'outdir')
         job_name = 'nimportnaoik'
         jobs = ena.jobs_from_assembly(acc, self.seqdd_tmp_dir, outdir, job_name)
-        self.assertEqual(len(jobs), 3)
-        curl, gzip, clean = jobs
-        self.assertEqual(curl.name, f'{job_name}_{acc}_download')
-        self.assertEqual(gzip.name, f'{job_name}_{acc}_gzip')
+        self.assertEqual(len(jobs), 2)
+        download, clean = jobs
+        self.assertEqual(download.name, f'{job_name}_{acc}_download')
         self.assertEqual(clean.name, f'{job_name}_{acc}_move')
-        self.assertTrue(isinstance(curl, CmdLineJob))
-        self.assertTrue(isinstance(gzip, CmdLineJob))
+        self.assertTrue(isinstance(download, FunctionJob))
         self.assertTrue(isinstance(clean, FunctionJob))
-        self.assertEqual(curl.parents, [])
-        self.assertEqual(gzip.parents, [curl])
-        self.assertEqual(clean.parents, [gzip])
+        self.assertEqual(download.parents, [])
+        self.assertEqual(clean.parents, [download])
 
 
     def test_move_and_clean_wo_md5(self):
-        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc_dir = os.path.join(self._tmp_dir.name, 'acc_dir')
         out_dir = os.path.join(self._tmp_dir.name, 'out_dir')
         os.mkdir(acc_dir)
         os.mkdir(out_dir)
         genome_path = self.find_data('Genomes', 'AF268967.fa')
         self.copy_file(genome_path, acc_dir, zip=True)
-        ena.move_and_clean(acc_dir, out_dir)
+        move_and_clean(acc_dir, out_dir)
         dest = os.path.join(out_dir, 'acc_dir', os.path.basename(genome_path)) +'.zip'
         self.assertTrue(os.path.exists(dest))
         self.assertFalse(os.path.exists(acc_dir))
 
 
     def test_move_and_clean_w_bad_md5(self):
-        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc_dir = os.path.join(self._tmp_dir.name, 'acc_dir')
         out_dir = os.path.join(self._tmp_dir.name, 'out_dir')
         os.mkdir(acc_dir)
@@ -165,7 +179,7 @@ class TestEna(SeqddTest):
 
         with self.catch_log(log_name='seqdd') as log:
             with self.assertRaises(DownloadError) as ctx:
-                ena.move_and_clean(acc_dir, out_dir, md5s=md5)
+                move_and_clean(acc_dir, out_dir, md5s=md5)
             log_msg = log.get_value().rstrip()
 
             exp_msg = (f'MD5 hash mismatch for file {os.path.basename(arc_path)} in accession {acc_dir}.\n'
@@ -176,7 +190,6 @@ class TestEna(SeqddTest):
 
 
     def test_move_and_clean_w_good_md5(self):
-        ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc_dir = os.path.join(self._tmp_dir.name, 'acc_dir')
         out_dir = os.path.join(self._tmp_dir.name, 'out_dir')
         os.mkdir(acc_dir)
@@ -184,7 +197,7 @@ class TestEna(SeqddTest):
         genome_path = self.find_data('Genomes', 'AF268967.fa')
         arc_path = self.copy_file(genome_path, acc_dir, zip=True)
         md5 = {os.path.basename(arc_path): self.md5sum(arc_path)}
-        ena.move_and_clean(acc_dir, out_dir, md5s=md5)
+        move_and_clean(acc_dir, out_dir, md5s=md5)
         dest = os.path.join(out_dir, 'acc_dir', os.path.basename(genome_path)) +'.zip'
         self.assertTrue(os.path.exists(dest))
         self.assertFalse(os.path.exists(acc_dir))
@@ -209,126 +222,79 @@ class TestEna(SeqddTest):
 
 
     def test_valid_accesions_on_API(self):
-        # valid_accesions_on_API use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        seqdd.register.sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_003543015.1']
-        fake_curl_response = CompletedProcess(args=['fakecurl', 'https://www.ebi.ac.uk/ena/browser/api/xml/GCA_003543015.1?download=false&gzip=false&includeLinks=false'],
-                                    returncode=0)
-        with open(self.find_data(f'subprocess_resp_valid_acc_API_{accs[0]}.err'), 'rb') as f:
-            fake_curl_response.stderr = f.read()
-        with open(self.find_data(f'subprocess_resp_valid_acc_API_{accs[0]}.out'), 'rb') as f:
-            fake_curl_response.stdout = f.read()
-
-        seqdd.register.sources.ena.subprocess.run.return_value = fake_curl_response
-        valid_accs = ena.valid_accessions_on_API(accs)
+        body = _read_fixture(f'subprocess_resp_valid_acc_API_{accs[0]}.out')
+        with patch('seqdd.utils.net.http_get_text', return_value=body):
+            valid_accs = ena.valid_accessions_on_API(accs)
         self.assertEqual(valid_accs, accs)
 
 
     def test_valid_accesions_on_API_unk_acc(self):
-        # valid_accesions_on_API use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        seqdd.register.sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_00000000.99']
-        fake_curl_response = CompletedProcess(
-            args=['fakecurl',
-                  f'https://www.ebi.ac.uk/ena/browser/api/xml/{accs[0]}?download=false&gzip=false&includeLinks=false'],
-            returncode=0)
-        with open(self.find_data(f'subprocess_resp_valid_acc_API_{accs[0]}.err'), 'rb') as f:
-            fake_curl_response.stderr = f.read()
-        with open(self.find_data(f'subprocess_resp_valid_acc_API_{accs[0]}.out'), 'rb') as f:
-            fake_curl_response.stdout = f.read()
-
-        seqdd.register.sources.ena.subprocess.run.return_value = fake_curl_response
-        with self.catch_log(log_name='seqdd') as log:
-            valid_accs = ena.valid_accessions_on_API(accs)
-            log_msg = log.get_value().rstrip()
+        body = _read_fixture(f'subprocess_resp_valid_acc_API_{accs[0]}.out')
+        query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accs[0]}?download=false&gzip=false&includeLinks=false'
+        with patch('seqdd.utils.net.http_get_text', return_value=body):
+            with self.catch_log(log_name='seqdd') as log:
+                valid_accs = ena.valid_accessions_on_API(accs)
+                log_msg = log.get_value().rstrip()
         self.assertEqual(valid_accs, [])
         expected_log = f"""Error querying ENA
-Query: {fake_curl_response.args[1]}
-Answer: {fake_curl_response.stdout.decode()}
+Query: {query}
+Answer: {body}
 Accession(s) not found on ENA servers: {', '.join(accs)}"""
-
         self.assertEqual(log_msg, expected_log)
 
 
     def test_valid_accesions_on_API_bad_acc(self):
-        # valid_accesions_on_API use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        seqdd.register.sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_00000000.BAD']
-        fake_curl_response = CompletedProcess(
-            args=['fakecurl', 'https://www.ebi.ac.uk/ena/browser/api/xml/GCA_00000000.BAD?download=false&gzip=false&includeLinks=false'],
-            returncode=0)
-        with open(self.find_data(f'subprocess_resp_valid_acc_API_{accs[0]}.err'), 'rb') as f:
-            fake_curl_response.stderr = f.read()
-        with open(self.find_data(f'subprocess_resp_valid_acc_API_{accs[0]}.out'), 'rb') as f:
-            fake_curl_response.stdout = f.read()
-
-        seqdd.register.sources.ena.subprocess.run.return_value = fake_curl_response
-        with self.catch_log(log_name='seqdd') as log:
-            valid_accs = ena.valid_accessions_on_API(accs)
-            log_msg = log.get_value().rstrip()
+        body = _read_fixture(f'subprocess_resp_valid_acc_API_{accs[0]}.out')
+        query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accs[0]}?download=false&gzip=false&includeLinks=false'
+        with patch('seqdd.utils.net.http_get_text', return_value=body):
+            with self.catch_log(log_name='seqdd') as log:
+                valid_accs = ena.valid_accessions_on_API(accs)
+                log_msg = log.get_value().rstrip()
         self.assertEqual(valid_accs, [])
         expected_log = f"""Error querying ENA
-Query: {fake_curl_response.args[1]}
-Answer: {fake_curl_response.stdout.decode()}
+Query: {query}
+Answer: {body}
 Accession(s) not found on ENA servers: {', '.join(accs)}"""
-
         self.assertEqual(log_msg, expected_log)
 
 
     def test_valid_accesions_on_API_mix_acc(self):
-        # valid_accesions_on_API use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        seqdd.register.sources.ena.subprocess = Mock()
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_003543015.1', 'SRS000006']
-        fake_curl_response = CompletedProcess(
-            args=['fakecurl',
-                  'https://www.ebi.ac.uk/ena/browser/api/xml/GCA_003543015.1,SRS000006?download=false&gzip=false&includeLinks=false'],
-            returncode=0)
-        with open(self.find_data('subprocess_resp_valid_acc_API_mix_acc.err'), 'rb') as f:
-            fake_curl_response.stderr = f.read()
-        with open(self.find_data('subprocess_resp_valid_acc_API_mix_acc.out'), 'rb') as f:
-            fake_curl_response.stdout = f.read()
-
-        seqdd.register.sources.ena.subprocess.run.return_value = fake_curl_response
-        with self.catch_log(log_name='seqdd') as log:
-            valid_accs = ena.valid_accessions_on_API(accs)
-            log_msg = log.get_value().rstrip()
+        body = _read_fixture('subprocess_resp_valid_acc_API_mix_acc.out')
+        query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{",".join(accs)}?download=false&gzip=false&includeLinks=false'
+        with patch('seqdd.utils.net.http_get_text', return_value=body):
+            with self.catch_log(log_name='seqdd') as log:
+                valid_accs = ena.valid_accessions_on_API(accs)
+                log_msg = log.get_value().rstrip()
         self.assertEqual(valid_accs, [])
         expected_log = f"""Error querying ENA
-Query: {fake_curl_response.args[1]}
-Answer: {fake_curl_response.stdout.decode()}
+Query: {query}
+Answer: {body}
 Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
         self.assertEqual(log_msg, expected_log)
 
 
-    def test_valid_accesions_on_API_curl_failed(self):
-        # valid_accesions_on_API use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        seqdd.register.sources.ena.subprocess = Mock()
+    def test_valid_accesions_on_API_download_failed(self):
+        # The pure-Python network layer raises DownloadError when the request fails.
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         accs = ['GCA_003543015.1']
-        fake_curl_response = CompletedProcess(args=['curl', 'https://no_where_fake_url.org'],
-                                              returncode=6)
-        with open(self.find_data('subprocess_resp_valid_acc_API_curl_failed.err'), 'rb') as f:
-            fake_curl_response.stderr = f.read()
-        with open(self.find_data('subprocess_resp_valid_acc_API_curl_failed.out'), 'rb') as f:
-            fake_curl_response.stdout = f.read()
-
-        seqdd.register.sources.ena.subprocess.run.return_value = fake_curl_response
-        with self.catch_log(log_name='seqdd') as log:
-            valid_accs = ena.valid_accessions_on_API(accs)
-            log_msg = log.get_value().rstrip()
+        err = DownloadError('connection refused')
+        query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accs[0]}?download=false&gzip=false&includeLinks=false'
+        with patch('seqdd.utils.net.http_get_text', side_effect=err):
+            with self.catch_log(log_name='seqdd') as log:
+                valid_accs = ena.valid_accessions_on_API(accs)
+                log_msg = log.get_value().rstrip()
         self.assertEqual(valid_accs, [])
         expected_log = f"""Error querying ENA
-Query: {f"https://www.ebi.ac.uk/ena/browser/api/xml/{'GCA_003543015.1'}?download=false&gzip=false&includeLinks=false"}
-Answer: {fake_curl_response.stderr.decode()}
+Query: {query}
+Answer: {err}
 Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
         self.assertEqual(log_msg, expected_log)
 
@@ -357,54 +323,8 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
                          f"Invalid accession: {acc}")
 
 
-    def fake_ena_ftp_curl(args, stdout=None, stderr=None):
-        cmde, url = args
-        class MockResponse:
-
-            def __init__(self, out, err, rcode):
-                self.returncode = rcode
-                self.stderr = err
-                self.stdout = out
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, type, value, traceback):
-                return False
-
-        if url.startswith('https://www.ebi.ac.uk/ena/browser/api/xml/'):
-            acc = url.lstrip('https://www.ebi.ac.uk/ena/browser/api/xml/').rstrip('?download=false&gzip=false&includeLinks=false')
-            if acc == 'ERR00001.BAD':
-                returncode = 12
-            else:
-                returncode = 0
-
-            with open(os.path.join(os.path.dirname(__file__), 'data',f'subprocess_get_ena_ftp_url_{acc}.err'), 'rb') as f:
-                err = f.read()
-            with open(os.path.join(os.path.dirname(__file__), 'data', f'subprocess_get_ena_ftp_url_{acc}.out'), 'rb') as f:
-                out = f.read()
-            return MockResponse(out, err, returncode)
-
-        elif url.startswith('https://www.ebi.ac.uk/ena/portal/api/filereport?accession='):
-            acc = url.lstrip('https://www.ebi.ac.uk/ena/portal/api/filereport?accession=').rstrip('&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes')
-            if acc == 'ERR00002.BAD':
-                returncode = 22
-            else:
-                returncode = 0
-
-            with open(os.path.join(os.path.dirname(__file__), 'data', f'subprocess_get_ena_ftp_url_fastq_{acc}.err'), 'rb') as f:
-                err = f.read()
-            with open(os.path.join(os.path.dirname(__file__), 'data', f'subprocess_get_ena_ftp_url_fastq_{acc}.out'), 'rb') as f:
-                out = f.read()
-            return MockResponse(out, err, returncode)
-
-
-
-    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
-    def test_get_ena_ftp_url_no_fastq(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        # seqdd.register.data_sources.ena.subprocess = Mock()
+    @patch('seqdd.utils.net.http_get_text', side_effect=fake_ena_http_get_text)
+    def test_get_ena_ftp_url_no_fastq(self, mocked):
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'GCA_003543015.1'
 
@@ -416,12 +336,8 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
                   f'No fastq files found for accession {acc}')
 
 
-    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
-    def test_get_ena_ftp_url_fastq(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        # when fastq are available 2 calls to subprocess are performed
-        # we cannot use a MagicMock
+    @patch('seqdd.utils.net.http_get_text', side_effect=fake_ena_http_get_text)
+    def test_get_ena_ftp_url_fastq(self, mocked):
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR3258091'
         to_download = ena.get_ena_ftp_url(acc)
@@ -430,73 +346,50 @@ Accession(s) not found on ENA servers: {', '.join(sorted(accs))}"""
                               ('ftp.sra.ebi.ac.uk/vol1/fastq/ERR325/001/ERR3258091/ERR3258091.fastq.gz', 'da03ef37d3f6f03c2a527449f7e562fd')
                               )
 
-    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
-    def test_get_ena_ftp_url_curl_failed(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        # when fastq are available 2 calls to subprocess are performed
-        # we cannot use a MagicMock
-
-        # the first curl call return with non zero value
+    @patch('seqdd.utils.net.http_get_text', side_effect=fake_ena_http_get_text)
+    def test_get_ena_ftp_url_download_failed(self, mocked):
+        # The first request (XML browser API) fails.
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00001.BAD'
         with self.catch_log(log_name='seqdd') as log:
             to_download = ena.get_ena_ftp_url(acc)
             log_msg = log.get_value().rstrip()
         self.assertListEqual(to_download, [])
-        with open(self.find_data(f'subprocess_get_ena_ftp_url_{acc}.err'), 'rb') as f:
-                    err = f.read()
         exp_msg = f"""Error querying ENA
 Query: https://www.ebi.ac.uk/ena/browser/api/xml/{acc}?download=false&gzip=false&includeLinks=false
-Answer: {err.decode().rstrip()}"""
+Answer: xml endpoint unreachable"""
         self.assertEqual(log_msg, exp_msg)
 
 
-    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
-    def test_get_ena_ftp_url_curl_failed_2(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        # when fastq are available 2 calls to subprocess are performed
-        # we cannot use a MagicMock
-
-        # the second curl call return with non zero value
+    @patch('seqdd.utils.net.http_get_text', side_effect=fake_ena_http_get_text)
+    def test_get_ena_ftp_url_download_failed_2(self, mocked):
+        # The second request (filereport) fails.
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00002.BAD'
         with self.catch_log(log_name='seqdd') as log:
             to_download = ena.get_ena_ftp_url(acc)
             log_msg = log.get_value().rstrip()
         self.assertListEqual(to_download, [])
-        with open(self.find_data(f'subprocess_get_ena_ftp_url_fastq_{acc}.err'), 'rb') as f:
-                    err = f.read()
+        fastq_url = (f'https://www.ebi.ac.uk/ena/portal/api/filereport?accession={acc}'
+                     '&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes')
         exp_msg = f"""Error querying ENA
-Query: https://www.ebi.ac.uk/ena/portal/api/filereport?accession={acc}&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes
-Answer: {err.decode().rstrip()}"""
-
+Query: {fastq_url}
+Answer: filereport endpoint unreachable"""
         self.assertEqual(log_msg, exp_msg)
 
 
-    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
-    def test_get_ena_ftp_url_curl_failed_3(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        # when fastq are available 2 calls to subprocess are performed
-        # we cannot use a MagicMock
-
-        # the second curl call return output with less than 2 lines
+    @patch('seqdd.utils.net.http_get_text', side_effect=fake_ena_http_get_text)
+    def test_get_ena_ftp_url_too_few_lines(self, mocked):
+        # The filereport answer holds less than 2 lines.
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00003.BAD'
         to_download = ena.get_ena_ftp_url(acc)
         self.assertListEqual(to_download, [])
 
 
-    @patch('subprocess.run', side_effect=fake_ena_ftp_curl)
-    def test_get_ena_ftp_url_curl_failed_4(self, mocked_run):
-        # get_ena_ftp_url use subprocess to spawn a curl subprocess
-        # we mock subprocess run to mimic the response of ENA
-        # when fastq are available 2 calls to subprocess are performed
-        # we cannot use a MagicMock
-
-        # the second curl call return output with no fastq_ftp nor fastq_md5 in header
+    @patch('seqdd.utils.net.http_get_text', side_effect=fake_ena_http_get_text)
+    def test_get_ena_ftp_url_no_fastq_columns(self, mocked):
+        # The filereport header has neither fastq_ftp nor fastq_md5.
         ena = ENA(self.seqdd_tmp_dir, self.logger)
         acc = 'ERR00004.BAD'
         with self.catch_log(log_name='seqdd') as log:

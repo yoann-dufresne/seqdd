@@ -53,11 +53,11 @@ class TestSequences(SeqddTest):
         jobs = container.get_download_jobs(self._data.name)
         names = [j.name for j in jobs]
 
+        # Download + gzip are now a single pure-Python job, followed by the move job.
         self.assertIn('ena_U00096.3_download', names)
-        self.assertIn('ena_U00096.3_gzip', names)
         self.assertIn('ena_U00096.3_move', names)
-        curl = next(j for j in jobs if j.name.endswith('_download'))
-        self.assertIn('ena/browser/api/fasta/U00096.3', curl.cmd)
+        download = next(j for j in jobs if j.name.endswith('_download'))
+        self.assertIn('ena/browser/api/fasta/U00096.3', download.args[0])
 
     def test_get_download_jobs_skips_already_downloaded(self):
         container = self._container()

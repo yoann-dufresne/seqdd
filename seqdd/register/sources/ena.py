@@ -2,11 +2,11 @@ import logging
 from os import listdir, makedirs, path
 import re
 from shutil import rmtree, move
-import subprocess
 
 from seqdd.register.sources import DataSource
-from ...utils.scheduler import Job, CmdLineJob, FunctionJob
-from ...utils.commands import curl_download
+from ...utils.scheduler import Job, FunctionJob
+from ...utils import net
+from ...utils.checksum import md5sum
 from ...errors import DownloadError
 
 
@@ -15,8 +15,6 @@ class ENA(DataSource):
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
     """
-
-    required_binaries = frozenset({'curl', 'gzip', 'md5sum'})
 
     # Regular expression for each type of ENA accession
     accession_patterns = {
@@ -78,8 +76,8 @@ class ENA(DataSource):
             # Get file urls to download
             urls = self.get_ena_ftp_url(acc)
 
-            # Creates a curl job for each URL
-            curl_jobs = []
+            # Creates a download job for each URL
+            download_jobs = []
             md5s = dict()
             for url, md5 in urls:
                 # Get the file name from the URL
@@ -88,19 +86,20 @@ class ENA(DataSource):
                 md5s[filename] = md5
                 # Create the output file path
                 output_file = path.join(tmp_dir, filename)
-                # Create the command line job
-                curl_jobs.append(CmdLineJob(
-                    command_line=curl_download(url, output_file, silent=True),
-                    can_start = self.source_delay_ready,
+                # Create the download job (pure-Python, no external binary)
+                download_jobs.append(FunctionJob(
+                    func_to_run=net.download_file,
+                    func_args=(url, output_file),
+                    can_start=self.source_delay_ready,
                     name=f'{job_name}_{filename}'
                 ))
-            jobs.extend(curl_jobs)
+            jobs.extend(download_jobs)
 
             # Create a function job to move the files to the final directory
             jobs.append(FunctionJob(
-                func_to_run = self.move_and_clean,
-                func_args = (tmp_dir, datadir, md5s),
-                parents = curl_jobs,
+                func_to_run=move_and_clean,
+                func_args=(tmp_dir, datadir, md5s),
+                parents=download_jobs,
                 name=f'{job_name}_move'
             ))
 
@@ -110,40 +109,35 @@ class ENA(DataSource):
     def _fasta_record_jobs(self, accession: str, tmpdir: str, outdir: str, job_name: str) -> list[Job]:
         """
         Creates the jobs to download a single FASTA record (an assembly or a sequence) from the
-        ENA browser API: curl the FASTA, gzip it, then move it to the output directory.
+        ENA browser API: download the FASTA, gzip it, then move it to the output directory.
 
         :param accession: The ENA accession to download.
         :param tmpdir: The temporary directory path. Where the downloaded intermediate files are located.
         :param outdir: The output directory path. Where the expected files will be located.
         :param job_name: The base name of the jobs.
-        :return: A list of jobs [curl, gzip, move].
+        :return: A list of jobs [download, move].
         """
         # Get the record URL
         url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{accession}'
-        # Create the output file path
+        # Create the output file path (compression to .gz happens in the download job)
         output_file = path.join(tmpdir, f'{accession}.fa')
 
-        # Create the command line job
-        curl_job = CmdLineJob(
-            command_line=curl_download(url, output_file, silent=False),
+        # Download then gzip the FASTA in a single pure-Python job
+        download_job = FunctionJob(
+            func_to_run=net.download_and_gzip,
+            func_args=(url, output_file),
             can_start=self.source_delay_ready,
             name=f'{job_name}_download'
         )
-        # Create a compression job
-        gzip_job = CmdLineJob(
-            command_line=f'gzip {output_file}',
-            parents=[curl_job],
-            name=f'{job_name}_gzip'
-        )
         # Create a function job to move the files to the final directory
         move_job = FunctionJob(
-            func_to_run=self.move_and_clean,
+            func_to_run=move_and_clean,
             func_args=(tmpdir, outdir),
-            parents=[gzip_job],
+            parents=[download_job],
             name=f'{job_name}_move'
         )
 
-        return [curl_job, gzip_job, move_job]
+        return [download_job, move_job]
 
 
     def jobs_from_assembly(self, assembly: str, tmpdir: str, outdir: str, job_name: str) -> list[Job]:
@@ -210,60 +204,17 @@ class ENA(DataSource):
             url = f'https://www.ebi.ac.uk/ena/browser/api/fasta/{acc}'
             self.wait_my_turn()
             try:
-                response = subprocess.run(
-                    ['curl', '-s', '-I', '-o', '/dev/null', '-w', '%{http_code}', url],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15
-                )
-            except subprocess.TimeoutExpired:
+                status = net.http_status(url)
+            finally:
                 self.end_my_turn()
-                self.logger.error(f'Timeout querying ENA for accession {acc}')
-                continue
-            self.end_my_turn()
 
-            if response.returncode == 0 and response.stdout.decode().strip() == '200':
+            if status == 200:
                 valid_accessions.append(acc)
             else:
                 self.logger.warning(f'Sequence accession not found on ENA servers: {acc}')
 
         return valid_accessions
 
-
-    def move_and_clean(self, accession_dir: str, outdir: str, md5s: dict[str, str] | None = None) -> None:
-        """
-        Moves the downloaded files from the accession directory to the output directory and cleans
-        up the temporary directory.
-
-        :param accession_dir: The directory path containing the downloaded files.
-        :param outdir: The output directory path. Where the expected files will be located.
-        :param md5s: The md5s sum attached to each filename
-        :type md5s: dict {filename str: md5 str}
-        """
-        if md5s is not None:
-            # Validate the MD5 hashes
-            for filename, md5 in md5s.items():
-                file_path = path.join(accession_dir, filename)
-                md5_check = subprocess.run(['md5sum', file_path], stdout=subprocess.PIPE)
-                # Get the MD5 hash of the file
-                md5_hash = md5_check.stdout.decode().split()[0]
-                # Check if the MD5 hash is correct
-                if md5 != md5_hash:
-                    msg = (f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\n'
-                            'Accession files will not be downloaded.')
-                    self.logger.error(msg)
-                    rmtree(accession_dir)
-                    raise DownloadError(msg)
-
-        # Create the accession directory in the output directory
-        outdir = path.join(outdir, path.basename(accession_dir))
-        makedirs(outdir, exist_ok=True)
-
-        filenames = listdir(accession_dir) if md5s is None else md5s.keys()
-        # Enumerate all the files from the accession directory
-        for filename in filenames:
-            move(path.join(accession_dir, filename), path.join(outdir, filename))
-
-        # Clean the directory
-        rmtree(accession_dir)
 
     # --- ENA accession validity ---
 
@@ -310,21 +261,15 @@ class ENA(DataSource):
             # Wait for the delay
             self.wait_my_turn()
             # Query the ENA database
-            response = None
             try:
-                response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-            except subprocess.TimeoutExpired:
+                response = net.http_get_text(query)
+            except DownloadError as err:
+                self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {err}')
+                continue
+            finally:
                 self.end_my_turn()
-                self.logger.error(f'Timeout querying ENA\nQuery: {query}')
-                continue
-            self.end_my_turn()
-
-            if response.returncode != 0:
-                self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
-                continue
 
             # Parse the response
-            response = response.stdout.decode()
             if 'ErrorDetails' in response:
                 self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response}')
                 continue
@@ -364,16 +309,14 @@ class ENA(DataSource):
         # Query the ENA API to get the FTP URL(s) for fastq files
         query = f'https://www.ebi.ac.uk/ena/browser/api/xml/{accession}?download=false&gzip=false&includeLinks=false'
         self.wait_my_turn()
-        response = subprocess.run(['curl', query], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.end_my_turn()
-
-        # Check if the query was successful
-        if response.returncode != 0:
-            self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {response.stderr.decode()}')
+        try:
+            response = net.http_get_text(query)
+        except DownloadError as err:
+            self.logger.error(f'Error querying ENA\nQuery: {query}\nAnswer: {err}')
             return []
+        finally:
+            self.end_my_turn()
 
-        # Parse the response
-        response = response.stdout.decode()
         # Get the url for fastq files
         match = re.search(r'<ID><!\[CDATA\[(https?://[^\]]+fastq_ftp[^\]]*)\]\]></ID>', response)
         if not match:
@@ -383,16 +326,16 @@ class ENA(DataSource):
         # Get the file list from the URL
         fastq_url = match.group(1)
         self.wait_my_turn()
-        response = subprocess.run(['curl', fastq_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.end_my_turn()
-
-        # Check if the query was successful
-        if response.returncode != 0:
-            self.logger.error(f'Error querying ENA\nQuery: {fastq_url}\nAnswer: {response.stderr.decode()}')
+        try:
+            response = net.http_get_text(fastq_url)
+        except DownloadError as err:
+            self.logger.error(f'Error querying ENA\nQuery: {fastq_url}\nAnswer: {err}')
             return []
+        finally:
+            self.end_my_turn()
 
         # Parse the response
-        lines = response.stdout.decode().strip().split('\n')
+        lines = response.strip().split('\n')
         if len(lines) < 2:
             return []
 
@@ -423,3 +366,44 @@ class ENA(DataSource):
                 files.extend(zip(ftp_urls, md5_hashes))
 
         return files
+
+
+def move_and_clean(accession_dir: str, outdir: str, md5s: dict[str, str] | None = None) -> None:
+    """
+    Moves the downloaded files from the accession directory to the output directory and cleans
+    up the temporary directory.
+
+    Defined at module level (not as a method) so it stays picklable as a ``FunctionJob`` target
+    under the ``spawn`` multiprocessing start method (Windows/macOS).
+
+    :param accession_dir: The directory path containing the downloaded files.
+    :param outdir: The output directory path. Where the expected files will be located.
+    :param md5s: The md5s sum attached to each filename
+    :type md5s: dict {filename str: md5 str}
+    """
+    logger = logging.getLogger('seqdd')
+    if md5s is not None:
+        # Validate the MD5 hashes
+        for filename, md5 in md5s.items():
+            file_path = path.join(accession_dir, filename)
+            # Compute the MD5 hash of the file with the standard library
+            md5_hash = md5sum(file_path)
+            # Check if the MD5 hash is correct
+            if md5 != md5_hash:
+                msg = (f'MD5 hash mismatch for file {filename} in accession {accession_dir}.\n'
+                        'Accession files will not be downloaded.')
+                logger.error(msg)
+                rmtree(accession_dir)
+                raise DownloadError(msg)
+
+    # Create the accession directory in the output directory
+    outdir = path.join(outdir, path.basename(accession_dir))
+    makedirs(outdir, exist_ok=True)
+
+    filenames = listdir(accession_dir) if md5s is None else md5s.keys()
+    # Enumerate all the files from the accession directory
+    for filename in filenames:
+        move(path.join(accession_dir, filename), path.join(outdir, filename))
+
+    # Clean the directory
+    rmtree(accession_dir)
