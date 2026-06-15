@@ -4,11 +4,14 @@ import platform
 import re
 import logging
 import sys
+from shutil import copyfile
 from tempfile import gettempdir
 
 from .register.reg_manager import create_register, Register
 from .register.datatype_manager import DataTypeManager
 from .utils.download import DownloadManager
+from .utils.binaries import missing_binaries, required_binaries_for
+from .utils.manifest import verify_manifest, verify_against, load_manifest_file, MANIFEST_NAME
 
 
 def threads_available() -> int:
@@ -100,6 +103,9 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     download.add_argument('--log-directory',
                           default='logs',
                           help='Directory where all the logs will be stored')
+    download.add_argument('--dry-run',
+                          action='store_true',
+                          help='Show what would be downloaded without downloading anything.')
 
     # Export the register
     export = subparsers.add_parser('export',
@@ -109,6 +115,13 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
     export.add_argument('-o', '--output-register',
                         type=str, default='myregister.reg',
                         help='Name of the register file. Please prefer filenames .reg terminated.')
+    export.add_argument('-d', '--download-directory',
+                        default='data',
+                        help='Directory holding the downloaded data and its manifest (used with --with-lock)')
+    export.add_argument('--with-lock',
+                        action='store_true',
+                        help=f'Also export the provenance manifest ({MANIFEST_NAME}) next to the register, '
+                             'as <register>.lock.json, for verifiable reproducibility')
 
     # List the datasets from the register
     lst = subparsers.add_parser('list',
@@ -136,6 +149,32 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                         help='List of accessions to remove from the register. '
                              'Each accession can be a regular expression.')
 
+    # Verify downloaded data against the provenance manifest
+    verify = subparsers.add_parser('verify',
+                                   help='Verify downloaded data against the provenance manifest '
+                                        f'({MANIFEST_NAME}). Exits with a non-zero status on any '
+                                        'missing or corrupted file.',
+                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    verify.add_argument('-d', '--download-directory',
+                        default='data',
+                        help='Directory containing the downloaded data and its manifest')
+    verify.add_argument('-m', '--manifest',
+                        default=None,
+                        help='Path to a manifest to verify against, instead of the one inside the '
+                             'download directory. Useful to check data against a lock file shared '
+                             'alongside a .reg file.')
+
+    # Show download status of the registered accessions
+    status = subparsers.add_parser('status',
+                                   help='Show which registered accessions are downloaded and which are missing.',
+                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    status.add_argument('-d', '--download-directory',
+                        default='data',
+                        help='Directory where the data has been downloaded')
+    status.add_argument('-t', '--type',
+                        choices=data_types,
+                        help='Restrict the status to the given data type. If not specified, all types are shown.')
+
     # Shared arguments
     for subparser in subparsers.choices.values():
         subparser.add_argument('--register-location',
@@ -148,6 +187,22 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
         parser.error('--unitigs is only available for Logan source')
 
     return args
+
+
+def _ensure_binaries(required: list[str], logger: logging.Logger) -> None:
+    """
+    Exit with an error if any required external command-line tool is missing from the PATH.
+
+    :param required: The external executables needed for the current command.
+    :param logger: The object to log.
+    """
+    missing = missing_binaries(required)
+    if missing:
+        logger.critical(
+            f"Missing required tool(s): {', '.join(missing)}. "
+            "Please install them and make sure they are available in your PATH."
+        )
+        sys.exit(1)
 
 
 def on_remove(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -215,6 +270,70 @@ def on_list(args: argparse.Namespace, logger: logging.Logger) -> None:
             print("\t".join(matching[idx:idx+5]))
 
 
+def on_verify(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """
+    function corresponding to 'verify' sub command.
+
+    Re-hash the downloaded files and compare them to the provenance manifest. Exits with a
+    non-zero status if any recorded file is missing or corrupted.
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
+    try:
+        if args.manifest is not None:
+            manifest = load_manifest_file(args.manifest)
+            result = verify_against(manifest, args.download_directory)
+        else:
+            result = verify_manifest(args.download_directory)
+    except FileNotFoundError as err:
+        logger.error(str(err))
+        logger.error('Nothing to verify: run a download first, '
+                     'or point --download-directory / --manifest to the right location.')
+        sys.exit(1)
+
+    for rel in result['missing']:
+        logger.error(f'MISSING  {rel}')
+    for rel in result['corrupt']:
+        logger.error(f'CORRUPT  {rel}')
+    for rel in result['extra']:
+        logger.warning(f'EXTRA    {rel}')
+
+    print(f"verify: {len(result['ok'])} ok, {len(result['corrupt'])} corrupt, "
+          f"{len(result['missing'])} missing, {len(result['extra'])} extra")
+
+    if result['corrupt'] or result['missing']:
+        sys.exit(1)
+
+
+def on_status(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """
+    function corresponding to 'status' sub command.
+
+    Compare the registered accessions with what is present in the download directory.
+
+    :param args: The parsed cmd line arguments
+    :param logger: The object to log
+    """
+    reg = Register(logger, dirpath=args.register_location)
+    datadir = args.download_directory
+    types = reg.data_containers.keys() if args.type is None else [args.type]
+
+    for name in types:
+        container = reg.data_containers[name]
+        if len(container) == 0:
+            continue
+        present = container.downloaded_accessions(datadir)
+        if present is None:
+            print(f'- {name}: {len(container)} accession(s) '
+                  '(per-accession status not tracked for this data type)')
+            continue
+        missing = sorted(container.data - present)
+        print(f'- {name}: {len(present)}/{len(container)} downloaded, {len(missing)} missing')
+        for idx in range(0, len(missing), 5):
+            print('\t' + '\t'.join(missing[idx:idx + 5]))
+
+
 def on_init(args: argparse.Namespace, logger:logging.Logger) -> None:
     """
     function corresponding to 'init' sub command
@@ -243,6 +362,9 @@ def on_add(args: argparse.Namespace, logger:logging.Logger) -> None:
     :param args: The parsed cmd line arguments
     :param logger: The object to log
     """
+    # Validating accessions queries the online sources, which requires curl.
+    _ensure_binaries(['curl'], logger)
+
     # Getting the file to the sources
     # src_path = os.path.join(args.register_location, f"{args.type}.txt")
     # bin_dir = os.path.join(args.register_location, 'bin')
@@ -290,8 +412,13 @@ def on_download(args: argparse.Namespace, logger: logging.Logger) -> None:
     # bindir = os.path.join(args.register_location, 'bin')
     datatype_manager = DataTypeManager(logger, tmpdir=args.tmp_directory)
     reg = Register(logger, dirpath=args.register_location)
+    if not args.dry_run:
+        _ensure_binaries(required_binaries_for(reg), logger)
     dm = DownloadManager(reg, datatype_manager, logger)
-    dm.download_to(args.download_directory, args.log_directory , args.max_processes)
+    result = dm.download_to(args.download_directory, args.log_directory, args.max_processes,
+                            dry_run=args.dry_run)
+    if result['failed'] or result['canceled']:
+        sys.exit(1)
 
 
 def on_export(args: argparse.Namespace, logger:logging.Logger) -> None:
@@ -304,6 +431,16 @@ def on_export(args: argparse.Namespace, logger:logging.Logger) -> None:
     reg = Register(logger, dirpath=args.register_location)
     reg.save_to_file(args.output_register)
     logger.info(f"Register exported to {args.output_register}")
+
+    if args.with_lock:
+        lock_src = os.path.join(args.download_directory, MANIFEST_NAME)
+        if os.path.isfile(lock_src):
+            lock_dst = f"{os.path.splitext(args.output_register)[0]}.lock.json"
+            copyfile(lock_src, lock_dst)
+            logger.info(f"Provenance manifest exported to {lock_dst}")
+        else:
+            logger.warning(f"No {MANIFEST_NAME} found in {args.download_directory}; "
+                           "run a download first to generate it. Lock not exported.")
 
 
 def main() -> None:
@@ -326,8 +463,8 @@ def main() -> None:
     logger.addHandler(handler)
     args = parse_cmd(logger)
 
-    # Verify the existence of the data register
-    if args.cmd != 'init':
+    # Verify the existence of the data register ('verify' works off the manifest, no register needed)
+    if args.cmd not in ('init', 'verify'):
         if not os.path.isdir(args.register_location):
             # Initialization on add
             if args.cmd in 'add':
