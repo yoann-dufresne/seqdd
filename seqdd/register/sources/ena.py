@@ -6,6 +6,7 @@ import subprocess
 
 from seqdd.register.sources import DataSource
 from ...utils.scheduler import Job, CmdLineJob, FunctionJob
+from ...utils.commands import curl_download
 from ...errors import DownloadError
 
 
@@ -14,6 +15,8 @@ class ENA(DataSource):
     """
     The ENA class represents a data downloader for the European Nucleotide Archive (ENA) database.
     """
+
+    required_binaries = frozenset({'curl', 'gzip', 'md5sum'})
 
     # Regular expression for each type of ENA accession
     accession_patterns = {
@@ -87,7 +90,7 @@ class ENA(DataSource):
                 output_file = path.join(tmp_dir, filename)
                 # Create the command line job
                 curl_jobs.append(CmdLineJob(
-                    command_line=f'curl -s -o {output_file} "{url}"',
+                    command_line=curl_download(url, output_file, silent=True),
                     can_start = self.source_delay_ready,
                     name=f'{job_name}_{filename}'
                 ))
@@ -122,7 +125,7 @@ class ENA(DataSource):
 
         # Create the command line job
         curl_job = CmdLineJob(
-            command_line=f'curl -o {output_file} "{url}"',
+            command_line=curl_download(url, output_file, silent=False),
             can_start=self.source_delay_ready,
             name=f'{job_name}_download'
         )

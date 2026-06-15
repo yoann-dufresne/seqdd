@@ -15,6 +15,8 @@ class RefSeq(DataSource):
     index and downloaded from the NCBI FTP server.
     """
 
+    required_binaries = frozenset({'curl', 'wget'})
+
     index_file = {
         "ftp": "ftp://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt"
     }
@@ -120,7 +122,7 @@ class RefSeq(DataSource):
 
             # Recursively download the assembly directory from the NCBI FTP server
             wget_job = CmdLineJob(
-                command_line=f'wget -r -np -nH --cut-dirs=6 -e robots=off -P {tmp_dir} "{ftp_path}/"',
+                command_line=f'wget -r -np -nH --cut-dirs=6 -e robots=off --tries=3 -c -P {tmp_dir} "{ftp_path}/"',
                 can_start=self.source_delay_ready,
                 name=f'{job_name}_wget'
             )

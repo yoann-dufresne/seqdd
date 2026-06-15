@@ -18,6 +18,9 @@ class DataSource(metaclass=abc.ABCMeta):
         last_query (float): The timestamp of the last server query.
     """
 
+    required_binaries: frozenset[str] = frozenset({'curl'})
+    """External command-line tools this source needs to validate and download data."""
+
     def __init__(self, tmpdir: str, logger: logging.Logger, min_delay: float = 0) -> None:
         self.tmp_dir = tmpdir
         self.logger = logger

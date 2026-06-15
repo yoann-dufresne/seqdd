@@ -3,6 +3,7 @@ from os import path
 import subprocess
 from urllib.parse import urlparse
 from seqdd.utils.scheduler import CmdLineJob, Job
+from seqdd.utils.commands import curl_download
 from seqdd.register.sources import DataSource
 
 class UrlServer(DataSource):
@@ -43,7 +44,8 @@ class UrlServer(DataSource):
             filepath = path.join(datadir, f'url{idx}_{filename}')
             job_name = f'url_{filename}'
 
-            jobs.append(CmdLineJob(f'curl -o {filepath} "{url}"', can_start=self.source_delay_ready, name=job_name))
+            jobs.append(CmdLineJob(curl_download(url, filepath, silent=False),
+                                   can_start=self.source_delay_ready, name=job_name))
 
         return jobs
 
