@@ -186,37 +186,57 @@ def download_file(url: str, dest: str, *, resume: bool = True, retries: int = DE
 
 def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: int) -> None:
     """
-    Download an http(s) URL to ``dest`` with streaming and optional Range-based resume.
+    Download an http(s) URL to ``dest`` with streaming and Range-based resume.
+
+    ``urllib3`` retries only cover establishing the response (connect/status), not a connection that
+    drops *while* the body is streaming. To survive such mid-stream cuts within a single call, the
+    streaming is wrapped in a bounded retry loop: on a network error during the body, a new request
+    is issued whose ``Range`` resumes from the bytes already written. The loop is bounded by
+    ``max(1, retries) + 1`` attempts so a server that always cuts at the same offset cannot loop
+    forever.
 
     :param url: The http/https URL to download.
     :param dest: The destination file path.
     :param resume: Whether to resume a partially downloaded file.
     :param retries: The number of retries on transient network errors.
     :param timeout: The per-request timeout in seconds.
-    :raises DownloadError: If the download fails.
+    :raises DownloadError: If the download fails after all attempts.
     """
-    headers = {}
-    existing = os.path.getsize(dest) if (resume and os.path.exists(dest)) else 0
-    if existing:
-        headers['Range'] = f'bytes={existing}-'
+    # ``retries`` is the number of retries beyond the first attempt (retries=0 -> a single attempt,
+    # i.e. no in-call resume; the caller can still resume on a later call).
+    max_attempts = max(0, retries) + 1
+    last_err: Exception | None = None
 
-    with _build_session(retries) as session:
+    for _ in range(max_attempts):
+        # Recompute the resume offset on every attempt: a previous attempt may have written part of
+        # the body before being cut, and the next request must continue from there.
+        existing = os.path.getsize(dest) if (resume and os.path.exists(dest)) else 0
+        headers = {'Range': f'bytes={existing}-'} if existing else {}
+
         try:
-            with session.get(url, timeout=timeout, allow_redirects=True,
-                             headers=headers, stream=True) as response:
-                if response.status_code == 416:
-                    # Requested range not satisfiable: the file is already complete.
-                    return
-                if response.status_code >= 400:
-                    raise DownloadError(f'GET {url} returned HTTP {response.status_code}')
-                # 206 => the server honored the range, append; otherwise (re)write from scratch.
-                mode = 'ab' if (existing and response.status_code == 206) else 'wb'
-                with open(dest, mode) as fh:
-                    for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
-                        if chunk:
-                            fh.write(chunk)
+            with _build_session(retries) as session:
+                with session.get(url, timeout=timeout, allow_redirects=True,
+                                 headers=headers, stream=True) as response:
+                    if response.status_code == 416:
+                        # Requested range not satisfiable: the file is already complete.
+                        return
+                    if response.status_code >= 400:
+                        # A durable HTTP error (urllib3 already retried 5xx): do not loop on it.
+                        raise DownloadError(f'GET {url} returned HTTP {response.status_code}')
+                    # 206 => the server honored the range, append; otherwise (re)write from scratch.
+                    mode = 'ab' if (existing and response.status_code == 206) else 'wb'
+                    with open(dest, mode) as fh:
+                        for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
+                            if chunk:
+                                fh.write(chunk)
+            return
         except requests.RequestException as err:
-            raise DownloadError(f'Download failed for {url}: {err}') from err
+            # Mid-stream drop (or connection error): retry and resume, unless resume is disabled.
+            last_err = err
+            if not resume:
+                break
+
+    raise DownloadError(f'Download failed for {url}: {last_err}')
 
 
 def download_and_gzip(url: str, dest: str) -> None:

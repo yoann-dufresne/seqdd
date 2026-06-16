@@ -11,13 +11,19 @@ from tests import SeqddTest
 
 
 class FakeResponse:
-    """Minimal stand-in for a requests.Response usable as a context manager."""
+    """Minimal stand-in for a requests.Response usable as a context manager.
 
-    def __init__(self, status_code=200, content=b'', headers=None, chunks=None):
+    ``error_after_bytes`` simulates a mid-stream connection drop: chunks are yielded until that
+    many bytes have been produced, then a ``requests.ConnectionError`` is raised (the bytes already
+    yielded are written to disk, mimicking a truncated transfer).
+    """
+
+    def __init__(self, status_code=200, content=b'', headers=None, chunks=None, error_after_bytes=None):
         self.status_code = status_code
         self.content = content
         self.headers = headers or {}
         self._chunks = chunks if chunks is not None else [content]
+        self._error_after_bytes = error_after_bytes
 
     def __enter__(self):
         return self
@@ -26,7 +32,12 @@ class FakeResponse:
         return False
 
     def iter_content(self, chunk_size=1):
-        yield from self._chunks
+        produced = 0
+        for chunk in self._chunks:
+            yield chunk
+            produced += len(chunk)
+            if self._error_after_bytes is not None and produced >= self._error_after_bytes:
+                raise net.requests.ConnectionError('simulated mid-stream drop')
 
     def close(self):
         pass
@@ -188,6 +199,45 @@ class TestNetHelpers(SeqddTest):
         with self.patched_session(session):
             with self.assertRaises(DownloadError):
                 net.download_file('https://x/y', dest, resume=False)
+
+    def test_download_http_auto_resumes_after_midstream_drop(self):
+        # A single download_file call must survive a mid-stream connection drop: the first response
+        # writes part of the body then raises, the second resumes from the partial file via Range.
+        dest = os.path.join(self.tmp, 'out.bin')
+        session = FakeSession(get_responses=[
+            FakeResponse(200, chunks=[b'abc', b'def'], error_after_bytes=3),  # writes b'abc', then drops
+            FakeResponse(206, chunks=[b'def']),                               # resumes the rest
+        ])
+        with self.patched_session(session):
+            net.download_file('https://x/y', dest, resume=True)
+        with open(dest, 'rb') as fh:
+            self.assertEqual(fh.read(), b'abcdef')
+        # Two requests were issued; the second carried a Range resuming from the 3 written bytes.
+        self.assertEqual(len(session.get_calls), 2)
+        self.assertEqual(session.get_calls[0][1]['headers'], {})
+        self.assertEqual(session.get_calls[1][1]['headers'], {'Range': 'bytes=3-'})
+
+    def test_download_http_gives_up_after_bounded_attempts(self):
+        # A server that always drops must not loop forever: the attempts are bounded.
+        dest = os.path.join(self.tmp, 'out.bin')
+        session = FakeSession(get_responses=[
+            FakeResponse(200, chunks=[b'ab'], error_after_bytes=2),
+            FakeResponse(206, chunks=[b'cd'], error_after_bytes=2),
+        ])
+        with self.patched_session(session):
+            with self.assertRaises(DownloadError):
+                net.download_file('https://x/y', dest, resume=True, retries=1)  # -> 2 attempts
+        # Exactly the bounded number of attempts were made (no infinite loop).
+        self.assertEqual(len(session.get_calls), 2)
+
+    def test_download_http_no_resume_does_not_retry_drop(self):
+        # With resume disabled, a mid-stream drop is not retried.
+        dest = os.path.join(self.tmp, 'out.bin')
+        session = FakeSession(get_responses=[FakeResponse(200, chunks=[b'ab'], error_after_bytes=2)])
+        with self.patched_session(session):
+            with self.assertRaises(DownloadError):
+                net.download_file('https://x/y', dest, resume=False)
+        self.assertEqual(len(session.get_calls), 1)
 
     # --- download_and_gzip ---
 
