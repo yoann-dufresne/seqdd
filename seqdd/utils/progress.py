@@ -1,15 +1,16 @@
 """
-Minimal, dependency-free progress reporting for the download job queue.
+Minimal, dependency-free progress reporting for the download pipeline.
 
-The download pipeline runs many jobs in parallel and each job already writes its own output to a
-dedicated log file. The only thing worth showing live on the console is therefore *how many jobs
-are finished*. This module renders that as a single, in-place line on an interactive terminal
-(rewritten with a carriage return) and stays silent on non-interactive streams (CI logs, pipes,
-redirections), where the caller keeps emitting plain periodic log lines instead — so logs are
-never polluted with carriage-return spam.
+On an interactive terminal the caller draws a single, in-place line (rewritten with a carriage
+return) that combines a finished-jobs counter (``x/n``) with a byte progress bar for the files being
+downloaded (the bar is filled by bytes downloaded / total). On a non-interactive stream (CI logs,
+pipes, redirections) the caller keeps emitting plain periodic log lines instead, so logs are never
+polluted with carriage-return spam.
 
-Everything here is standard library only (no ``tqdm``), preserving seqdd's single third-party
-runtime dependency (``requests``).
+This module provides the pure line formatters (:func:`format_byte_progress`,
+:func:`format_jobs_line`, :func:`human_bytes`) and the in-place line writer (:class:`ProgressBar`).
+Everything is standard library only (no ``tqdm``), preserving seqdd's single third-party runtime
+dependency (``requests``).
 """
 
 from __future__ import annotations
@@ -35,38 +36,6 @@ def human_bytes(n: int) -> str:
     return f'{size:.1f} {units[-1]}'
 
 
-def format_progress(done: int, total: int, *, width: int = 30, failed: int = 0,
-                    elapsed: float | None = None, extra: str = '') -> str:
-    """
-    Build the textual job-count progress bar for ``done``/``total`` finished jobs.
-
-    Pure function (no I/O, no clock): for the same inputs it always returns the same string, which
-    makes it directly unit-testable.
-
-    :param done: The number of finished jobs.
-    :param total: The total number of jobs.
-    :param width: The width of the bar (in characters).
-    :param failed: The number of failed/canceled jobs to flag (omitted when 0).
-    :param elapsed: An optional elapsed time in seconds, appended when provided.
-    :param extra: Optional extra text (e.g. bytes downloaded) appended after the percentage.
-    :return: A one-line progress string, e.g. ``[###############---------------] 5/10 jobs (50%)``.
-    """
-    total = max(total, 0)
-    done = max(0, min(done, total)) if total else max(done, 0)
-    fraction = (done / total) if total else 1.0
-    filled = int(fraction * width)
-    bar = '#' * filled + '-' * (width - filled)
-    percent = int(fraction * 100)
-    text = f'[{bar}] {done}/{total} jobs ({percent}%)'
-    if extra:
-        text += extra
-    if elapsed is not None:
-        text += f' {elapsed:.0f}s'
-    if failed:
-        text += f' - {failed} failed'
-    return text
-
-
 def format_byte_progress(downloaded: int, total: int, *, width: int = 30,
                          elapsed: float | None = None, suffix: str = '') -> str:
     """
@@ -78,7 +47,7 @@ def format_byte_progress(downloaded: int, total: int, *, width: int = 30,
     :param total: Total bytes expected (the bar is empty when this is 0).
     :param width: The width of the bar (in characters).
     :param elapsed: An optional elapsed time in seconds, appended when provided.
-    :param suffix: Optional trailing text (e.g. a job count) appended after the percentage.
+    :param suffix: Optional trailing text appended after the percentage.
     :return: A one-line string, e.g. ``[############------------------] 12.0 MiB / 30.0 MiB (40%)``.
     """
     fraction = (downloaded / total) if total > 0 else 0.0
@@ -94,23 +63,43 @@ def format_byte_progress(downloaded: int, total: int, *, width: int = 30,
     return text
 
 
+def format_jobs_line(done: int, total: int, *, downloaded: int = 0,
+                     elapsed: float | None = None) -> str:
+    """
+    Build the counter line shown while no byte total is known yet — a plain ``x/n`` counter, no bar.
+
+    Used at the very start of a run, and for downloads whose size the server does not announce
+    (e.g. chunked responses): the bytes pulled so far are shown as a throughput counter instead.
+
+    :param done: The number of finished jobs.
+    :param total: The total number of jobs.
+    :param downloaded: Bytes downloaded so far (shown as a throughput counter when > 0).
+    :param elapsed: An optional elapsed time in seconds, appended when provided.
+    :return: A one-line string, e.g. ``3/8 jobs  12.0 MiB  5s``.
+    """
+    text = f'{done}/{total} jobs'
+    if downloaded:
+        text += f'  {human_bytes(downloaded)}'
+    if elapsed is not None:
+        text += f' {elapsed:.0f}s'
+    return text
+
+
 class ProgressBar:
     """
-    A live, single-line job-count progress bar.
+    A live, single-line, in-place writer for a pre-formatted progress line.
 
-    On an interactive terminal it rewrites one line in place; on a non-interactive stream it is a
-    no-op (:attr:`active` is False) so the caller can fall back to logging.
+    On an interactive terminal it rewrites one line in place (carriage return + clear-to-end of
+    line); on a non-interactive stream it is a no-op (:attr:`active` is False) so the caller can
+    fall back to logging. The line content is composed by the caller (see :func:`format_byte_progress`
+    and :func:`format_jobs_line`).
     """
 
-    def __init__(self, total: int, *, stream: TextIO | None = None, width: int = 30) -> None:
+    def __init__(self, *, stream: TextIO | None = None) -> None:
         """
-        :param total: The total number of jobs to track.
         :param stream: The stream to draw on (defaults to :data:`sys.stderr`).
-        :param width: The width of the bar (in characters).
         """
-        self.total = total
         self.stream = stream if stream is not None else sys.stderr
-        self.width = width
         self._start = time.monotonic()
         self._closed = False
 
@@ -130,7 +119,7 @@ class ProgressBar:
 
     def draw(self, line: str) -> None:
         """
-        Draw an arbitrary, pre-formatted line in place (no-op off a TTY or after :meth:`close`).
+        Draw a pre-formatted line in place (no-op off a TTY or after :meth:`finish`).
 
         :param line: The fully-formatted line to render.
         """
@@ -150,39 +139,5 @@ class ProgressBar:
         self._closed = True
         if not self.active:
             return
-        self.stream.write(f'\r{line}\x1b[K\n')
-        self.stream.flush()
-
-    def update(self, done: int, failed: int = 0, extra: str = '') -> None:
-        """
-        Redraw the bar in place (no-op on a non-interactive stream or after :meth:`close`).
-
-        :param done: The number of finished jobs.
-        :param failed: The number of failed/canceled jobs.
-        :param extra: Optional extra text (e.g. bytes downloaded) appended after the percentage.
-        """
-        if not self.active or self._closed:
-            return
-        line = format_progress(done, self.total, width=self.width, failed=failed,
-                               elapsed=time.monotonic() - self._start, extra=extra)
-        # Pad to clear any leftovers from a previously longer line, then return to column 0.
-        self.stream.write(f'\r{line}\x1b[K')
-        self.stream.flush()
-
-    def close(self, done: int, failed: int = 0, extra: str = '') -> None:
-        """
-        Draw the final state and move to a new line. Idempotent.
-
-        :param done: The number of finished jobs.
-        :param failed: The number of failed/canceled jobs.
-        :param extra: Optional extra text (e.g. bytes downloaded) appended after the percentage.
-        """
-        if self._closed:
-            return
-        self._closed = True
-        if not self.active:
-            return
-        line = format_progress(done, self.total, width=self.width, failed=failed,
-                               elapsed=time.monotonic() - self._start, extra=extra)
         self.stream.write(f'\r{line}\x1b[K\n')
         self.stream.flush()

@@ -6,7 +6,7 @@ import time
 
 from seqdd.utils.scheduler import JobManager
 from seqdd.utils.manifest import write_manifest, MANIFEST_NAME
-from seqdd.utils.progress import ProgressBar, format_byte_progress, human_bytes
+from seqdd.utils.progress import ProgressBar, format_byte_progress, format_jobs_line
 from ..register.reg_manager import Register
 from ..register.datatype_manager import DataTypeManager
 
@@ -122,54 +122,51 @@ class DownloadManager:
         # job-count bar until any total is known; per-job INFO logs are silenced so they do not
         # fight with the bar. On a non-interactive stream (CI, pipes, log files) keep emitting a
         # plain log line whenever the count changes, with no carriage-return spam.
-        progress = ProgressBar(n_jobs)
+        progress = ProgressBar()
         per_job: dict[str, list] = {}   # job_id -> [downloaded_bytes, total_or_None]
-        active = set()
         last_remaining = None
 
         def absorb(events):
             for job_id, delta, total in events:
                 if delta is None:           # end marker: this job's download is over
-                    active.discard(job_id)
                     continue
                 entry = per_job.setdefault(job_id, [0, None])
                 entry[0] += delta
                 if total is not None:
                     entry[1] = total
-                active.add(job_id)
 
         def byte_totals():
             downloaded = sum(entry[0] for entry in per_job.values())
             total = sum(entry[1] for entry in per_job.values() if entry[1])
             return downloaded, total
 
+        def render(done, *, final=False):
+            # A plain "x/n jobs" counter, plus a byte bar for the files being downloaded — but only
+            # once a size is known. The bar is never filled by the job count, so it cannot first
+            # grow with finished jobs and then jump back to zero for the bytes.
+            downloaded, total = byte_totals()
+            if total > 0:
+                line = f'{done}/{n_jobs} jobs  ' + format_byte_progress(downloaded, total,
+                                                                        elapsed=progress.elapsed)
+            else:
+                line = format_jobs_line(done, n_jobs, downloaded=downloaded, elapsed=progress.elapsed)
+            (progress.finish if final else progress.draw)(line)
+
         with (self._quiet_console_logs() if progress.active else nullcontext()):
             while manager.remaining_jobs() > 0:
                 absorb(manager.poll_progress())
                 remaining = manager.remaining_jobs()
                 done = n_jobs - remaining
-                failed = len(manager.failed_jobs) + len(manager.canceled_jobs)
                 if progress.active:
-                    downloaded, total = byte_totals()
-                    jobs_txt = f'{done}/{n_jobs} jobs' + (f', {len(active)} active' if active else '')
-                    if total > 0:
-                        progress.draw(format_byte_progress(downloaded, total,
-                                                           elapsed=progress.elapsed, suffix=jobs_txt))
-                    else:
-                        progress.update(done, failed, f'  {human_bytes(downloaded)}' if downloaded else '')
+                    render(done)
                 elif remaining != last_remaining:
                     self.logger.info(f'Progress: {done}/{n_jobs} job(s) finished')
                     last_remaining = remaining
                 time.sleep(0.25 if progress.active else 1)
             # Final drain for the last byte events, then settle the bar on its own line.
             absorb(manager.poll_progress())
-            failed = len(manager.failed_jobs) + len(manager.canceled_jobs)
-            downloaded, total = byte_totals()
-            if total > 0:
-                progress.finish(format_byte_progress(downloaded, total, elapsed=progress.elapsed,
-                                                     suffix=f'{n_jobs}/{n_jobs} jobs'))
-            else:
-                progress.close(n_jobs, failed, f'  {human_bytes(downloaded)}' if downloaded else '')
+            if progress.active:
+                render(n_jobs, final=True)
 
         # Stop and join the JobManager
         manager.stop()
