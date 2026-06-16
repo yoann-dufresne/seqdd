@@ -19,7 +19,6 @@ SeqDD API documentation
     register/data_sources/url_server
     utils/download.rst
     utils/scheduler.rst
+    utils/net.rst
     utils/manifest.rst
     utils/checksum.rst
-    utils/binaries.rst
-    utils/commands.rst

@@ -16,11 +16,20 @@ Tests
 
 The seqDD use `unittest` framework (included in the standard library) to test the code.
 
+The unit tests are pure Python and run on **Linux, macOS and Windows without network access**:
+downloads (including resume after a mid-stream interruption) are exercised against a local,
+in-process HTTP server (``tests/support``). The ``tests/functional/*.sh`` scripts, on the other
+hand, drive the real ``seqdd`` CLI against live servers and therefore need network access and a
+POSIX shell.
+
 All tests stuff is in `tests` directory.
 
 * The data directory contains data needed by the tests
 * in the __init__.py file a SeqddTest class is defined and should be the base of all testcase use in the project
 * each test_*.py represent a file containing unit or functional tests
+* ``tests/test_download_large.py`` covers large downloads, resume and interruption scenarios;
+  ``tests/stress/large_download_stress.py`` is a standalone, env-scalable stress tool
+  (``python -m tests.stress.large_download_stress``)
 
 To run all the tests (in the virtualenv)
 
@@ -129,30 +138,10 @@ then display a report
     coverage report
 
 
-.. code-block:: text
+``coverage report`` then prints a per-module table (``Name``, ``Stmts``, ``Miss``, ``Branch``,
+``BrPart``, ``Cover``) followed by a ``TOTAL`` line.
 
-    Name                                      Stmts   Miss Branch BrPart  Cover
-    ---------------------------------------------------------------------------
-    seqdd/__init__.py                             0      0      0      0   100%
-    seqdd/__main__.py                           142    142     40      0     0%
-    seqdd/errors.py                               4      0      0      0   100%
-    seqdd/register/__init__.py                    0      0      0      0   100%
-    seqdd/register/data_sources/__init__.py      27      3      0      0    89%
-    seqdd/register/data_sources/ena.py          164     89     62      5    42%
-    seqdd/register/data_sources/logan.py         81     81     26      0     0%
-    seqdd/register/data_sources/ncbi.py         145    145     52      0     0%
-    seqdd/register/data_sources/sra.py          159    159     48      0     0%
-    seqdd/register/data_sources/url.py           83     83     38      0     0%
-    seqdd/register/reg_manager.py               112    112     52      0     0%
-    seqdd/register/src_manager.py                49     49      4      0     0%
-    seqdd/utils/__init__.py                       0      0      0      0   100%
-    seqdd/utils/download.py                      54     54     16      0     0%
-    seqdd/utils/scheduler.py                    202    131     66      0    26%
-    ---------------------------------------------------------------------------
-    TOTAL                                      1222   1048    404      5    12%
-
-
-or generate a html report
+To generate a html report
 
 .. code-block:: shell
 

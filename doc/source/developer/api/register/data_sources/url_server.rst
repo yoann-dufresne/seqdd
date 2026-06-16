@@ -11,8 +11,8 @@
 url_server API
 ==============
 
-Generic curl-based downloader for arbitrary URLs. It is the source shared by the ``url`` and
-``logan`` data types.
+Generic downloader for arbitrary URLs, built on the pure-Python :mod:`seqdd.utils.net` layer
+(``requests``). It is the source shared by the ``url`` and ``logan`` data types.
 
 .. automodule:: seqdd.register.sources.url_server
    :members:

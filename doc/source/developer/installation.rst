@@ -16,6 +16,11 @@ Installation
 dependencies
 ============
 
+SeqDD is pure Python and runs on Linux, macOS and Windows. Its only runtime dependency is:
+    - requests  (HTTP/HTTPS; ``ftp://`` URLs use the standard-library ``ftplib``)
+
+No external command-line tool (``curl``, ``wget``, ``gzip``, ``md5sum``) is required.
+
 SeqDD use sphinx with some extensions to generate the documentation:
     - sphinx
     - sphinx_rtd_theme
@@ -29,7 +34,8 @@ It's a good idea to use a python linter to check your code before to submit a pu
 
     - ruff
 
-All these dependencies are managed by `pip`
+The runtime dependency is installed with `seqdd` itself; the documentation, test and lint
+dependencies are the `dev` extra. All these dependencies are managed by `pip`.
 
 Installation procedures
 =======================
