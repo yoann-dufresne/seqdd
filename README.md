@@ -83,11 +83,7 @@ All the register files are downloaded into the data directory
     seqdd export -o myregister.reg
 ```
 
-## Run the tests
-
-```bash
-    python3 -m coverage run --source=seqdd
-```
+> Looking to run the test suite? See [Testing and development](#testing-and-development) at the end.
 
 
 # Tools description
@@ -281,3 +277,77 @@ To let someone reproduce *exactly* your dataset, ship the `.reg` together with t
     seqdd download -r mydataset.reg -d data
     seqdd verify -d data -m mydataset.lock.json         # confirms a bit-for-bit identical dataset
 ```
+
+
+# Testing and development
+
+Install the development extras (adds `coverage`, `ruff`, and Sphinx):
+
+```bash
+    pip install .[dev]
+```
+
+## Unit tests and coverage
+
+The unit tests are pure Python and run on **Linux, macOS and Windows without any network access** —
+downloads are exercised against a local, in-process HTTP server:
+
+```bash
+    coverage run --source=seqdd      # equivalent to: python3 -m unittest discover -s tests
+    coverage report
+```
+
+Run a single module, for example:
+
+```bash
+    python3 -m unittest tests.test_download_large -v
+```
+
+## Lint and format
+
+```bash
+    ruff check ./seqdd ./tests
+    ruff format ./seqdd ./tests
+```
+
+## Functional tests (network)
+
+`tests/functional/*.sh` drive the real `seqdd` CLI against live servers (ENA/EBI, NCBI, S3). They
+need network access and a POSIX shell:
+
+```bash
+    ./tests/functional/main.sh
+```
+
+## Large-scale download tests (interruption & resume)
+
+`tests/test_download_large.py` covers, deterministically and offline, the situations a downloader
+must survive: integrity of relatively big files, **resume after a mid-stream connection drop**,
+servers honoring/ignoring HTTP `Range`, transient `503`, parallel downloads through the scheduler,
+and the full `add -t url` + `download` pipeline with **resume across runs**. Default file sizes are
+modest for CI; scale them up with environment variables:
+
+```bash
+    # 64 MiB files, 6 parallel downloads in the parallel scenario
+    SEQDD_TEST_DOWNLOAD_MB=64 SEQDD_TEST_DOWNLOAD_FILES=6 \
+        python3 -m unittest tests.test_download_large -v
+```
+
+For a heavier, manual stress run (big files, many parallel transfers, repeated injected connection
+drops), use the standalone tool:
+
+```bash
+    python3 -m tests.stress.large_download_stress
+
+    # bigger run: 8 parallel files of 256 MiB, 5 injected drops each
+    SEQDD_BIG_DOWNLOAD_MB=256 SEQDD_BIG_DOWNLOAD_FILES=8 SEQDD_BIG_DOWNLOAD_DROPS=5 \
+        python3 -m tests.stress.large_download_stress
+
+    # stress a real URL instead of the local server (scale/integrity phase only)
+    SEQDD_BIG_DOWNLOAD_URL=https://example.org/big.file \
+        python3 -m tests.stress.large_download_stress
+```
+
+It prints a per-phase report and exits non-zero if any check fails. Every artifact is written under a
+temporary directory and removed at the end.
+
