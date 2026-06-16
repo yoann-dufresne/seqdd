@@ -33,6 +33,11 @@ DEFAULT_RETRIES = 3
 _CHUNK_SIZE = 1 << 20  # 1 MiB
 USER_AGENT = f'seqdd/{__version__} (+https://github.com/yoann-dufresne/seqdd)'
 
+# Progress callback signature: progress(delta_bytes, total_bytes_or_None).
+# ``delta_bytes`` is the size of the chunk just written; ``total`` is the expected size of the whole
+# download when known (HTTP Content-Length / FTP SIZE), else None.
+ProgressCallback = Callable[[int, 'int | None'], None]
+
 
 def _normalize_url(url: str) -> str:
     """
@@ -162,7 +167,7 @@ def http_head_headers(url: str, *, timeout: int = DEFAULT_TIMEOUT,
 
 
 def download_file(url: str, dest: str, *, resume: bool = True, retries: int = DEFAULT_RETRIES,
-                  timeout: int = DEFAULT_TIMEOUT, progress: Callable[[int], None] | None = None) -> None:
+                  timeout: int = DEFAULT_TIMEOUT, progress: ProgressCallback | None = None) -> None:
     """
     Download ``url`` to ``dest``, dispatching on the URL scheme (http/https vs ftp).
 
@@ -187,8 +192,29 @@ def download_file(url: str, dest: str, *, resume: bool = True, retries: int = DE
         _download_http(url, dest, resume=resume, retries=retries, timeout=timeout, progress=progress)
 
 
+def _content_total(response) -> int | None:
+    """
+    Best-effort total size of the resource from response headers.
+
+    Uses ``Content-Range`` (``bytes start-end/total``) on a 206 partial response, otherwise
+    ``Content-Length`` on a 200. Returns None when the size cannot be determined.
+
+    :param response: The streamed :mod:`requests` response.
+    :return: The full resource size in bytes, or None.
+    """
+    content_range = response.headers.get('Content-Range')
+    if content_range and '/' in content_range:
+        tail = content_range.rsplit('/', 1)[1].strip()
+        if tail.isdigit():
+            return int(tail)
+    length = response.headers.get('Content-Length')
+    if length and length.isdigit() and response.status_code != 206:
+        return int(length)
+    return None
+
+
 def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: int,
-                   progress: Callable[[int], None] | None = None) -> None:
+                   progress: ProgressCallback | None = None) -> None:
     """
     Download an http(s) URL to ``dest`` with streaming and Range-based resume.
 
@@ -229,12 +255,13 @@ def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: 
                         raise DownloadError(f'GET {url} returned HTTP {response.status_code}')
                     # 206 => the server honored the range, append; otherwise (re)write from scratch.
                     mode = 'ab' if (existing and response.status_code == 206) else 'wb'
+                    total = _content_total(response)
                     with open(dest, mode) as fh:
                         for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
                             if chunk:
                                 fh.write(chunk)
                                 if progress is not None:
-                                    progress(len(chunk))
+                                    progress(len(chunk), total)
             return
         except requests.RequestException as err:
             # Mid-stream drop (or connection error): retry and resume, unless resume is disabled.
@@ -245,7 +272,7 @@ def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: 
     raise DownloadError(f'Download failed for {url}: {last_err}')
 
 
-def download_and_gzip(url: str, dest: str, *, progress: Callable[[int], None] | None = None) -> None:
+def download_and_gzip(url: str, dest: str, *, progress: ProgressCallback | None = None) -> None:
     """
     Download ``url`` to ``dest`` then gzip-compress it to ``dest + '.gz'``.
 
@@ -284,12 +311,28 @@ def _ftp_connect(host: str, timeout: int) -> FTP:
         raise DownloadError(f'FTP connection to {host} failed: {err}') from err
 
 
-def _writer_with_progress(fh, progress: Callable[[int], None] | None):
+def _ftp_size(ftp: FTP, remote_path: str) -> int | None:
+    """
+    Return the size of a remote file via the FTP ``SIZE`` command, or None if unavailable.
+
+    :param ftp: An open, logged-in FTP connection.
+    :param remote_path: The remote file path.
+    :return: The file size in bytes, or None when the server does not support ``SIZE``.
+    """
+    try:
+        ftp.voidcmd('TYPE I')
+        return ftp.size(remote_path)
+    except (ftp_errors, OSError):
+        return None
+
+
+def _writer_with_progress(fh, progress: ProgressCallback | None, total: int | None):
     """
     Build the ``ftplib`` ``retrbinary`` block callback, optionally reporting bytes.
 
     :param fh: The open destination file handle to write each block to.
-    :param progress: Optional callback invoked with the byte length of each written block.
+    :param progress: Optional callback invoked with (block length, total size) for each block.
+    :param total: The expected total size of the file, or None if unknown.
     :return: ``fh.write`` when no progress is requested, otherwise a wrapper that writes then reports.
     """
     if progress is None:
@@ -297,13 +340,13 @@ def _writer_with_progress(fh, progress: Callable[[int], None] | None):
 
     def _sink(chunk: bytes) -> None:
         fh.write(chunk)
-        progress(len(chunk))
+        progress(len(chunk), total)
 
     return _sink
 
 
 def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
-                  progress: Callable[[int], None] | None = None) -> None:
+                  progress: ProgressCallback | None = None) -> None:
     """
     Download a single file from an ``ftp://`` URL to ``dest``.
 
@@ -322,8 +365,9 @@ def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
         try:
             ftp = _ftp_connect(host, timeout)
             try:
+                total = _ftp_size(ftp, remote_path)
                 with open(dest, 'wb') as fh:
-                    ftp.retrbinary(f'RETR {remote_path}', _writer_with_progress(fh, progress),
+                    ftp.retrbinary(f'RETR {remote_path}', _writer_with_progress(fh, progress, total),
                                    blocksize=_CHUNK_SIZE)
             finally:
                 _quietly_quit(ftp)
@@ -335,7 +379,7 @@ def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
 
 def download_ftp_dir(base_url: str, dest_dir: str, *, retries: int = DEFAULT_RETRIES,
                      timeout: int = DEFAULT_TIMEOUT,
-                     progress: Callable[[int], None] | None = None) -> None:
+                     progress: ProgressCallback | None = None) -> None:
     """
     Recursively download an FTP directory tree, mirroring ``wget -r -np -nH`` behavior.
 
@@ -371,7 +415,7 @@ def download_ftp_dir(base_url: str, dest_dir: str, *, retries: int = DEFAULT_RET
 
 
 def _recursive_ftp_download(ftp: FTP, remote_dir: str, local_dir: str,
-                            progress: Callable[[int], None] | None = None) -> None:
+                            progress: ProgressCallback | None = None) -> None:
     """
     Walk ``remote_dir`` on an open FTP connection, downloading every file into ``local_dir``.
 
@@ -388,7 +432,9 @@ def _recursive_ftp_download(ftp: FTP, remote_dir: str, local_dir: str,
             _recursive_ftp_download(ftp, remote_path, local_path, progress=progress)
         else:
             with open(local_path, 'wb') as fh:
-                ftp.retrbinary(f'RETR {remote_path}', _writer_with_progress(fh, progress),
+                # The total size of a whole directory tree is not known up front, so dir downloads
+                # report bytes with an unknown total (they appear in throughput, not in the byte bar).
+                ftp.retrbinary(f'RETR {remote_path}', _writer_with_progress(fh, progress, None),
                                blocksize=_CHUNK_SIZE)
 
 

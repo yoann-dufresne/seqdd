@@ -35,14 +35,16 @@ def _download_reporting(url: str, dest: str, report_queue, job_id: int) -> None:
     """
     Module-level (picklable) download worker, run in a subprocess under the non-fork context.
 
-    Downloads ``url`` to ``dest`` and pushes ``(job_id, n_bytes)`` on ``report_queue`` for each
-    written chunk, then a final ``(job_id, None)`` sentinel so the parent knows the job is done.
+    Downloads ``url`` to ``dest`` and pushes ``(job_id, delta, total)`` on ``report_queue`` for
+    each written chunk, then a final ``(job_id, None, None)`` sentinel so the parent knows the job
+    is done.
 
     The reporting callback is built **inside** the child, so nothing unpicklable crosses the
     process boundary: only this top-level function and its (picklable) arguments are sent.
     """
-    net.download_file(url, dest, resume=False, progress=lambda n: report_queue.put((job_id, n)))
-    report_queue.put((job_id, None))
+    net.download_file(url, dest, resume=False,
+                      progress=lambda delta, total: report_queue.put((job_id, delta, total)))
+    report_queue.put((job_id, None, None))
 
 
 class TestByteProgressIPC(SeqddTest):
@@ -87,14 +89,14 @@ class TestByteProgressIPC(SeqddTest):
         finished = 0
         while finished < n_jobs:
             try:
-                job_id, nbytes = report_queue.get(timeout=60)
+                job_id, delta, _total = report_queue.get(timeout=60)
             except queue_mod.Empty:
                 self.fail('Timed out waiting for byte-progress events from the download subprocesses')
-            if nbytes is None:
+            if delta is None:
                 finished += 1
             else:
-                self.assertGreater(nbytes, 0)
-                received[job_id] += nbytes
+                self.assertGreater(delta, 0)
+                received[job_id] += delta
 
         for proc in procs:
             proc.join(timeout=60)
@@ -128,6 +130,15 @@ class TestByteProgressIPC(SeqddTest):
         ]
 
         received = defaultdict(int)
+        totals_seen = set()
+
+        def absorb():
+            for job_id, delta, total in manager.poll_progress():
+                if delta is not None:
+                    received[job_id] += delta
+                    if total is not None:
+                        totals_seen.add(total)
+
         with self.catch_log():
             manager.start()
             for job in jobs:
@@ -135,16 +146,14 @@ class TestByteProgressIPC(SeqddTest):
             self.assertIsNotNone(manager.progress_queue, 'the JobManager should have created a queue')
             deadline = time.time() + 60
             while manager.remaining_jobs() > 0 and time.time() < deadline:
-                for job_id, n_bytes in manager.poll_progress():
-                    if n_bytes is not None:
-                        received[job_id] += n_bytes
+                absorb()
                 time.sleep(0.02)
-            for job_id, n_bytes in manager.poll_progress():
-                if n_bytes is not None:
-                    received[job_id] += n_bytes
+            absorb()
             manager.stop()
             manager.join()
 
         self.assertEqual(set(received), {'dl0', 'dl1'})
         for job_id in ('dl0', 'dl1'):
             self.assertEqual(received[job_id], self.size)
+        # The expected total (Content-Length) is reported alongside the byte deltas.
+        self.assertIn(self.size, totals_seen)

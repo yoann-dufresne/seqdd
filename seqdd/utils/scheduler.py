@@ -200,12 +200,13 @@ class JobManager(Thread):
         return len(self.waiting) + len(self.running)
 
 
-    def poll_progress(self) -> list[tuple[str, int | None]]:
+    def poll_progress(self) -> list[tuple[str, int | None, int | None]]:
         """
         Drain the byte-progress queue without blocking.
 
-        :return: A list of ``(job_id, n_bytes)`` events; ``n_bytes`` is None to mark a job's
-                 download as finished. Empty when no job reports progress.
+        :return: A list of ``(job_id, delta_bytes, total_bytes)`` events; ``delta_bytes`` is None to
+                 mark a job's download as finished. ``total_bytes`` is the expected size when known,
+                 else None. Empty when no job reports progress.
         """
         if self.progress_queue is None:
             return []
@@ -319,16 +320,16 @@ def _job_reports_progress(job: Job) -> bool:
         return False
 
 
-def _queue_reporter(progress_queue: Any, job_id: str | None) -> Callable[[int], None]:
+def _queue_reporter(progress_queue: Any, job_id: str | None) -> Callable[[int, int | None], None]:
     """
     Build the per-chunk progress callback used inside a worker process.
 
-    :param progress_queue: The queue receiving ``(job_id, n_bytes)`` events.
+    :param progress_queue: The queue receiving ``(job_id, delta_bytes, total_bytes)`` events.
     :param job_id: The identifier tagging this worker's events.
-    :return: A callback reporting the byte length passed to it.
+    :return: A callback forwarding the (delta bytes, total size) it receives to the queue.
     """
-    def report(n_bytes: int) -> None:
-        progress_queue.put((job_id, n_bytes))
+    def report(delta: int, total: int | None) -> None:
+        progress_queue.put((job_id, delta, total))
 
     return report
 
@@ -343,8 +344,8 @@ def _run_function_job(func: Callable, args: tuple[Any, ...], log_file: str,
 
     When ``progress_queue`` is provided, a ``progress`` callback is built **inside the child** (so
     nothing unpicklable crosses the process boundary) and passed to ``func``; it reports the byte
-    length of each downloaded chunk as ``(job_id, n_bytes)``, then a final ``(job_id, None)`` marker
-    once the function returns or fails.
+    length of each downloaded chunk as ``(job_id, delta, total)``, then a final
+    ``(job_id, None, None)`` marker once the function returns or fails.
 
     :param func: The function to run.
     :param args: The positional arguments to pass to ``func``.
@@ -357,9 +358,8 @@ def _run_function_job(func: Callable, args: tuple[Any, ...], log_file: str,
         sys.stderr = fw
         progress = None
         if progress_queue is not None:
-            # Never let a slow or absent reader block this worker's exit on the queue feeder thread;
-            # progress events are best-effort and may be dropped.
-            progress_queue.cancel_join_thread()
+            # The consumer (DownloadManager.download_to) drains the queue continuously, so the OS
+            # pipe never fills and the worker flushes every event when it exits (accurate counts).
             progress = _queue_reporter(progress_queue, job_id)
         print(f'Starting {func.__name__} with args {args}', file=fw)
         try:
@@ -374,7 +374,7 @@ def _run_function_job(func: Callable, args: tuple[Any, ...], log_file: str,
             raise e
         finally:
             if progress_queue is not None:
-                progress_queue.put((job_id, None))
+                progress_queue.put((job_id, None, None))
 
 
 class FunctionJob(Job):

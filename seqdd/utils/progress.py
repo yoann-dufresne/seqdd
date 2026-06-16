@@ -67,6 +67,33 @@ def format_progress(done: int, total: int, *, width: int = 30, failed: int = 0,
     return text
 
 
+def format_byte_progress(downloaded: int, total: int, *, width: int = 30,
+                         elapsed: float | None = None, suffix: str = '') -> str:
+    """
+    Build a byte-based progress bar whose fill reflects ``downloaded``/``total``.
+
+    Pure function (no I/O, no clock), so it is directly unit-testable.
+
+    :param downloaded: Bytes downloaded so far.
+    :param total: Total bytes expected (the bar is empty when this is 0).
+    :param width: The width of the bar (in characters).
+    :param elapsed: An optional elapsed time in seconds, appended when provided.
+    :param suffix: Optional trailing text (e.g. a job count) appended after the percentage.
+    :return: A one-line string, e.g. ``[############------------------] 12.0 MiB / 30.0 MiB (40%)``.
+    """
+    fraction = (downloaded / total) if total > 0 else 0.0
+    fraction = min(max(fraction, 0.0), 1.0)
+    filled = int(fraction * width)
+    bar = '#' * filled + '-' * (width - filled)
+    percent = int(fraction * 100)
+    text = f'[{bar}] {human_bytes(downloaded)} / {human_bytes(total)} ({percent}%)'
+    if suffix:
+        text += f'  {suffix}'
+    if elapsed is not None:
+        text += f' {elapsed:.0f}s'
+    return text
+
+
 class ProgressBar:
     """
     A live, single-line job-count progress bar.
@@ -93,6 +120,38 @@ class ProgressBar:
         :return: True when the stream is an interactive terminal worth drawing on.
         """
         return bool(getattr(self.stream, 'isatty', lambda: False)())
+
+    @property
+    def elapsed(self) -> float:
+        """
+        :return: Seconds elapsed since the bar was created.
+        """
+        return time.monotonic() - self._start
+
+    def draw(self, line: str) -> None:
+        """
+        Draw an arbitrary, pre-formatted line in place (no-op off a TTY or after :meth:`close`).
+
+        :param line: The fully-formatted line to render.
+        """
+        if not self.active or self._closed:
+            return
+        self.stream.write(f'\r{line}\x1b[K')
+        self.stream.flush()
+
+    def finish(self, line: str) -> None:
+        """
+        Draw a final, pre-formatted line and move to a new line. Idempotent.
+
+        :param line: The fully-formatted line to render.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        if not self.active:
+            return
+        self.stream.write(f'\r{line}\x1b[K\n')
+        self.stream.flush()
 
     def update(self, done: int, failed: int = 0, extra: str = '') -> None:
         """

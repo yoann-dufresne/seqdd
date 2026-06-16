@@ -9,7 +9,7 @@ import io
 
 from tests import SeqddTest
 
-from seqdd.utils.progress import ProgressBar, format_progress, human_bytes
+from seqdd.utils.progress import ProgressBar, format_byte_progress, format_progress, human_bytes
 
 
 class _FakeTTY(io.StringIO):
@@ -114,3 +114,56 @@ class TestHumanBytes(SeqddTest):
         self.assertEqual(human_bytes(1536), '1.5 KiB')
         self.assertEqual(human_bytes(5 * 1024 * 1024), '5.0 MiB')
         self.assertEqual(human_bytes(1 << 30), '1.0 GiB')
+
+
+class TestFormatByteProgress(SeqddTest):
+
+    def test_empty(self):
+        self.assertEqual(format_byte_progress(0, 100, width=10), '[----------] 0 B / 100 B (0%)')
+
+    def test_half(self):
+        self.assertEqual(format_byte_progress(50, 100, width=10), '[#####-----] 50 B / 100 B (50%)')
+
+    def test_full(self):
+        self.assertEqual(format_byte_progress(100, 100, width=10), '[##########] 100 B / 100 B (100%)')
+
+    def test_fill_reflects_bytes_not_jobs(self):
+        # The whole point: a single job downloaded to 40% shows 40%, not 0/1 jobs.
+        line = format_byte_progress(4 * 1024 * 1024, 10 * 1024 * 1024, width=10)
+        self.assertEqual(line, '[####------] 4.0 MiB / 10.0 MiB (40%)')
+
+    def test_overflow_is_clamped(self):
+        self.assertEqual(format_byte_progress(150, 100, width=10), '[##########] 150 B / 100 B (100%)')
+
+    def test_zero_total_is_empty(self):
+        self.assertEqual(format_byte_progress(0, 0, width=10), '[----------] 0 B / 0 B (0%)')
+
+    def test_suffix_and_elapsed(self):
+        line = format_byte_progress(50, 100, width=10, suffix='2/4 jobs', elapsed=7.0)
+        self.assertTrue(line.endswith('(50%)  2/4 jobs 7s'))
+
+
+class TestProgressBarDrawFinish(SeqddTest):
+
+    def test_draw_writes_line_in_place(self):
+        stream = _FakeTTY()
+        bar = ProgressBar(2, stream=stream, width=10)
+        bar.draw('hello')
+        self.assertEqual(stream.getvalue(), '\rhello\x1b[K')
+
+    def test_finish_terminates_and_is_idempotent(self):
+        stream = _FakeTTY()
+        bar = ProgressBar(2, stream=stream, width=10)
+        bar.finish('done')
+        first = stream.getvalue()
+        self.assertEqual(first, '\rdone\x1b[K\n')
+        bar.finish('again')      # no-op after close
+        bar.draw('again')        # no-op after close
+        self.assertEqual(stream.getvalue(), first)
+
+    def test_draw_is_noop_off_tty(self):
+        stream = io.StringIO()
+        bar = ProgressBar(2, stream=stream, width=10)
+        bar.draw('hello')
+        bar.finish('done')
+        self.assertEqual(stream.getvalue(), '')
