@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Callable
 import abc
+import inspect
 import logging
 import multiprocessing as mp
+import queue
 from os import path
 import sys
 from threading import Thread
@@ -56,6 +58,9 @@ class JobManager(Thread):
         self.completed_jobs = set()
         self.failed_jobs = set()
         self.canceled_jobs = set()
+        # Lazily-created multiprocessing queue collecting byte-progress events from jobs whose
+        # target accepts a ``progress`` callback (created on the first such job in add_job).
+        self.progress_queue = None
         # Logger
         self.max_process = max_process
         self.log_folder = path.abspath(log_folder) if log_folder is not None else None
@@ -131,6 +136,10 @@ class JobManager(Thread):
                 job.stop()
                 job.join()
 
+        # Release the progress queue (if any) now that no job will report anymore.
+        if self.progress_queue is not None:
+            self.progress_queue.close()
+
 
     def cancel_job(self, job: Job) -> None:
         """
@@ -165,6 +174,14 @@ class JobManager(Thread):
             logfile = path.join(self.log_folder, logfile_base)
             process.set_log_file(logfile)
 
+        # Wire a progress channel for jobs whose target accepts a ``progress`` callback, so the
+        # download functions can stream their byte counts back to the main process.
+        if _job_reports_progress(process):
+            if self.progress_queue is None:
+                self.progress_queue = _MP_CONTEXT.Queue()
+            process.progress_queue = self.progress_queue
+            process.progress_id = process.name
+
         # Add the dependancies of the process
         for parent in process.parents:
             if parent not in self.dependancies:
@@ -181,6 +198,24 @@ class JobManager(Thread):
         :return: The number of job that are running or waiting to start
         """
         return len(self.waiting) + len(self.running)
+
+
+    def poll_progress(self) -> list[tuple[str, int | None]]:
+        """
+        Drain the byte-progress queue without blocking.
+
+        :return: A list of ``(job_id, n_bytes)`` events; ``n_bytes`` is None to mark a job's
+                 download as finished. Empty when no job reports progress.
+        """
+        if self.progress_queue is None:
+            return []
+        events = []
+        try:
+            while True:
+                events.append(self.progress_queue.get_nowait())
+        except queue.Empty:
+            pass
+        return events
 
 
     def add_jobs(self, processes: Iterable[Job]) -> None:
@@ -269,28 +304,77 @@ class Job(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
 
-def _run_function_job(func: Callable, args: tuple[Any, ...], log_file: str) -> None:
+def _job_reports_progress(job: Job) -> bool:
+    """
+    :param job: A queued job.
+    :return: True if the job runs a function that accepts a ``progress`` keyword (so it can report
+             download progress over the JobManager's queue).
+    """
+    func = getattr(job, 'to_run', None)
+    if func is None:
+        return False
+    try:
+        return 'progress' in inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _queue_reporter(progress_queue: Any, job_id: str | None) -> Callable[[int], None]:
+    """
+    Build the per-chunk progress callback used inside a worker process.
+
+    :param progress_queue: The queue receiving ``(job_id, n_bytes)`` events.
+    :param job_id: The identifier tagging this worker's events.
+    :return: A callback reporting the byte length passed to it.
+    """
+    def report(n_bytes: int) -> None:
+        progress_queue.put((job_id, n_bytes))
+
+    return report
+
+
+def _run_function_job(func: Callable, args: tuple[Any, ...], log_file: str,
+                      progress_queue: Any = None, job_id: str | None = None) -> None:
     """
     Module-level entry point executed inside the ``FunctionJob`` subprocess.
 
     It must stay at module level (and only receive picklable arguments) so the job is safe under
     the ``spawn`` multiprocessing start method used on Windows and recent macOS.
 
+    When ``progress_queue`` is provided, a ``progress`` callback is built **inside the child** (so
+    nothing unpicklable crosses the process boundary) and passed to ``func``; it reports the byte
+    length of each downloaded chunk as ``(job_id, n_bytes)``, then a final ``(job_id, None)`` marker
+    once the function returns or fails.
+
     :param func: The function to run.
     :param args: The positional arguments to pass to ``func``.
     :param log_file: The path of the file collecting the subprocess output.
+    :param progress_queue: Optional multiprocessing queue receiving progress events.
+    :param job_id: The identifier tagging this job's progress events.
     """
     with open(log_file, 'w') as fw:
         sys.stdout = fw
         sys.stderr = fw
+        progress = None
+        if progress_queue is not None:
+            # Never let a slow or absent reader block this worker's exit on the queue feeder thread;
+            # progress events are best-effort and may be dropped.
+            progress_queue.cancel_join_thread()
+            progress = _queue_reporter(progress_queue, job_id)
         print(f'Starting {func.__name__} with args {args}', file=fw)
         try:
-            func(*args)
+            if progress is None:
+                func(*args)
+            else:
+                func(*args, progress=progress)
             print(f'Finished {func.__name__} with args {args}', file=fw)
         except Exception as e:
             print(f'Error in {func.__name__} with args {args}', file=fw)
             print(e, file=fw)
             raise e
+        finally:
+            if progress_queue is not None:
+                progress_queue.put((job_id, None))
 
 
 class FunctionJob(Job):
@@ -315,6 +399,10 @@ class FunctionJob(Job):
         super().__init__(parents=parents, can_start=can_start, name=name, log_file=f'{name}.log')
         self.to_run = func_to_run
         self.args = func_args
+        # Optional inter-process progress channel, wired by the JobManager for jobs whose target
+        # accepts a ``progress`` callback. Left as None for jobs that do not report progress.
+        self.progress_queue = None
+        self.progress_id: str | None = None
 
 
     def start(self) -> None:
@@ -326,7 +414,11 @@ class FunctionJob(Job):
         the child. It runs under a non-fork context (:data:`_MP_CONTEXT`), which keeps the job
         working on every platform and avoids forking from the multi-threaded JobManager.
         """
-        self.process = _MP_CONTEXT.Process(target=_run_function_job, args=(self.to_run, self.args, self.log_file))
+        if self.progress_queue is None:
+            proc_args = (self.to_run, self.args, self.log_file)
+        else:
+            proc_args = (self.to_run, self.args, self.log_file, self.progress_queue, self.progress_id)
+        self.process = _MP_CONTEXT.Process(target=_run_function_job, args=proc_args)
         self.process.start()
 
 

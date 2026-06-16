@@ -9,7 +9,7 @@ import io
 
 from tests import SeqddTest
 
-from seqdd.utils.progress import ProgressBar, format_progress
+from seqdd.utils.progress import ProgressBar, format_progress, human_bytes
 
 
 class _FakeTTY(io.StringIO):
@@ -46,6 +46,10 @@ class TestFormatProgress(SeqddTest):
 
     def test_elapsed_appended(self):
         self.assertIn(' 3s', format_progress(5, 10, width=10, elapsed=3.4))
+
+    def test_extra_text_appended_after_percentage(self):
+        line = format_progress(5, 10, width=10, extra='  5.0 MiB')
+        self.assertEqual(line, '[#####-----] 5/10 jobs (50%)  5.0 MiB')
 
     def test_zero_total_does_not_crash(self):
         # No jobs to download: treated as 100% complete, no division by zero.
@@ -90,3 +94,23 @@ class TestProgressBar(SeqddTest):
         after_close = stream.getvalue()
         bar.update(5)
         self.assertEqual(stream.getvalue(), after_close)
+
+    def test_extra_text_is_drawn(self):
+        stream = _FakeTTY()
+        bar = ProgressBar(10, stream=stream, width=10)
+        bar.update(2, extra='  3.0 MiB  (1 active)')
+        self.assertIn('3.0 MiB', stream.getvalue())
+        self.assertIn('(1 active)', stream.getvalue())
+
+
+class TestHumanBytes(SeqddTest):
+
+    def test_bytes(self):
+        self.assertEqual(human_bytes(0), '0 B')
+        self.assertEqual(human_bytes(512), '512 B')
+
+    def test_scales_up_binary_units(self):
+        self.assertEqual(human_bytes(1024), '1.0 KiB')
+        self.assertEqual(human_bytes(1536), '1.5 KiB')
+        self.assertEqual(human_bytes(5 * 1024 * 1024), '5.0 MiB')
+        self.assertEqual(human_bytes(1 << 30), '1.0 GiB')

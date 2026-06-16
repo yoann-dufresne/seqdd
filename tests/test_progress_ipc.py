@@ -15,10 +15,12 @@ that the step-2 mechanism is sound. The actual multi-line rendering (consuming t
 remaining, low-risk UI work.
 """
 
+import logging
 import os
 import queue as queue_mod
 import shutil
 import tempfile
+import time
 from collections import defaultdict
 
 from tests import SeqddTest
@@ -26,7 +28,7 @@ from tests.support.controllable_http_server import ControllableHTTPServer
 
 from seqdd.utils import net
 from seqdd.utils.checksum import sha256sum
-from seqdd.utils.scheduler import _MP_CONTEXT
+from seqdd.utils.scheduler import _MP_CONTEXT, FunctionJob, JobManager
 
 
 def _download_reporting(url: str, dest: str, report_queue, job_id: int) -> None:
@@ -111,3 +113,38 @@ class TestByteProgressIPC(SeqddTest):
         for job_id in range(n_jobs):
             percent = int(100 * received[job_id] / self.size)
             self.assertEqual(percent, 100)
+
+    def test_jobmanager_wires_progress_end_to_end(self):
+        # The integrated path: the JobManager detects that net.download_file accepts a `progress`
+        # argument, creates the queue, tags the jobs, and exposes the events via poll_progress().
+        out_dir = tempfile.mkdtemp(prefix='seqdd-jm-', dir=self._dir)
+        logger = logging.getLogger('seqdd')
+        manager = JobManager(logger=logger, max_process=2, log_folder=out_dir)
+        jobs = [
+            FunctionJob(func_to_run=net.download_file,
+                        func_args=(self.server.url(), os.path.join(out_dir, f'jm{i}.bin')),
+                        name=f'dl{i}')
+            for i in range(2)
+        ]
+
+        received = defaultdict(int)
+        with self.catch_log():
+            manager.start()
+            for job in jobs:
+                manager.add_job(job)
+            self.assertIsNotNone(manager.progress_queue, 'the JobManager should have created a queue')
+            deadline = time.time() + 60
+            while manager.remaining_jobs() > 0 and time.time() < deadline:
+                for job_id, n_bytes in manager.poll_progress():
+                    if n_bytes is not None:
+                        received[job_id] += n_bytes
+                time.sleep(0.02)
+            for job_id, n_bytes in manager.poll_progress():
+                if n_bytes is not None:
+                    received[job_id] += n_bytes
+            manager.stop()
+            manager.join()
+
+        self.assertEqual(set(received), {'dl0', 'dl1'})
+        for job_id in ('dl0', 'dl1'):
+            self.assertEqual(received[job_id], self.size)

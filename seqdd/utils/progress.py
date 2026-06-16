@@ -19,8 +19,24 @@ import time
 from typing import TextIO
 
 
+def human_bytes(n: int) -> str:
+    """
+    Format a byte count with a binary unit (B, KiB, MiB, …).
+
+    :param n: A number of bytes.
+    :return: A short human-readable string, e.g. ``12.3 MiB`` (or ``512 B`` for small values).
+    """
+    size = float(max(n, 0))
+    units = ('B', 'KiB', 'MiB', 'GiB', 'TiB')
+    for unit in units[:-1]:
+        if size < 1024.0:
+            return f'{size:.0f} {unit}' if unit == 'B' else f'{size:.1f} {unit}'
+        size /= 1024.0
+    return f'{size:.1f} {units[-1]}'
+
+
 def format_progress(done: int, total: int, *, width: int = 30, failed: int = 0,
-                    elapsed: float | None = None) -> str:
+                    elapsed: float | None = None, extra: str = '') -> str:
     """
     Build the textual job-count progress bar for ``done``/``total`` finished jobs.
 
@@ -32,6 +48,7 @@ def format_progress(done: int, total: int, *, width: int = 30, failed: int = 0,
     :param width: The width of the bar (in characters).
     :param failed: The number of failed/canceled jobs to flag (omitted when 0).
     :param elapsed: An optional elapsed time in seconds, appended when provided.
+    :param extra: Optional extra text (e.g. bytes downloaded) appended after the percentage.
     :return: A one-line progress string, e.g. ``[###############---------------] 5/10 jobs (50%)``.
     """
     total = max(total, 0)
@@ -41,6 +58,8 @@ def format_progress(done: int, total: int, *, width: int = 30, failed: int = 0,
     bar = '#' * filled + '-' * (width - filled)
     percent = int(fraction * 100)
     text = f'[{bar}] {done}/{total} jobs ({percent}%)'
+    if extra:
+        text += extra
     if elapsed is not None:
         text += f' {elapsed:.0f}s'
     if failed:
@@ -75,26 +94,29 @@ class ProgressBar:
         """
         return bool(getattr(self.stream, 'isatty', lambda: False)())
 
-    def update(self, done: int, failed: int = 0) -> None:
+    def update(self, done: int, failed: int = 0, extra: str = '') -> None:
         """
         Redraw the bar in place (no-op on a non-interactive stream or after :meth:`close`).
 
         :param done: The number of finished jobs.
         :param failed: The number of failed/canceled jobs.
+        :param extra: Optional extra text (e.g. bytes downloaded) appended after the percentage.
         """
         if not self.active or self._closed:
             return
         line = format_progress(done, self.total, width=self.width, failed=failed,
-                               elapsed=time.monotonic() - self._start)
-        self.stream.write(f'\r{line}')
+                               elapsed=time.monotonic() - self._start, extra=extra)
+        # Pad to clear any leftovers from a previously longer line, then return to column 0.
+        self.stream.write(f'\r{line}\x1b[K')
         self.stream.flush()
 
-    def close(self, done: int, failed: int = 0) -> None:
+    def close(self, done: int, failed: int = 0, extra: str = '') -> None:
         """
         Draw the final state and move to a new line. Idempotent.
 
         :param done: The number of finished jobs.
         :param failed: The number of failed/canceled jobs.
+        :param extra: Optional extra text (e.g. bytes downloaded) appended after the percentage.
         """
         if self._closed:
             return
@@ -102,6 +124,6 @@ class ProgressBar:
         if not self.active:
             return
         line = format_progress(done, self.total, width=self.width, failed=failed,
-                               elapsed=time.monotonic() - self._start)
-        self.stream.write(f'\r{line}\n')
+                               elapsed=time.monotonic() - self._start, extra=extra)
+        self.stream.write(f'\r{line}\x1b[K\n')
         self.stream.flush()

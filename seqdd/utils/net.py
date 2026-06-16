@@ -245,7 +245,7 @@ def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: 
     raise DownloadError(f'Download failed for {url}: {last_err}')
 
 
-def download_and_gzip(url: str, dest: str) -> None:
+def download_and_gzip(url: str, dest: str, *, progress: Callable[[int], None] | None = None) -> None:
     """
     Download ``url`` to ``dest`` then gzip-compress it to ``dest + '.gz'``.
 
@@ -254,9 +254,10 @@ def download_and_gzip(url: str, dest: str) -> None:
 
     :param url: The URL to download.
     :param dest: The path of the uncompressed file; the result is written to ``dest + '.gz'``.
+    :param progress: Optional callback invoked with the byte length of each downloaded chunk.
     :raises DownloadError: If the download fails.
     """
-    download_file(url, dest)
+    download_file(url, dest, progress=progress)
     gz_path = f'{dest}.gz'
     with open(dest, 'rb') as src, gzip.open(gz_path, 'wb') as dst:
         shutil.copyfileobj(src, dst, length=_CHUNK_SIZE)
@@ -283,6 +284,24 @@ def _ftp_connect(host: str, timeout: int) -> FTP:
         raise DownloadError(f'FTP connection to {host} failed: {err}') from err
 
 
+def _writer_with_progress(fh, progress: Callable[[int], None] | None):
+    """
+    Build the ``ftplib`` ``retrbinary`` block callback, optionally reporting bytes.
+
+    :param fh: The open destination file handle to write each block to.
+    :param progress: Optional callback invoked with the byte length of each written block.
+    :return: ``fh.write`` when no progress is requested, otherwise a wrapper that writes then reports.
+    """
+    if progress is None:
+        return fh.write
+
+    def _sink(chunk: bytes) -> None:
+        fh.write(chunk)
+        progress(len(chunk))
+
+    return _sink
+
+
 def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
                   progress: Callable[[int], None] | None = None) -> None:
     """
@@ -304,11 +323,8 @@ def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
             ftp = _ftp_connect(host, timeout)
             try:
                 with open(dest, 'wb') as fh:
-                    def _sink(chunk: bytes) -> None:
-                        fh.write(chunk)
-                        if progress is not None:
-                            progress(len(chunk))
-                    ftp.retrbinary(f'RETR {remote_path}', _sink, blocksize=_CHUNK_SIZE)
+                    ftp.retrbinary(f'RETR {remote_path}', _writer_with_progress(fh, progress),
+                                   blocksize=_CHUNK_SIZE)
             finally:
                 _quietly_quit(ftp)
             return
@@ -318,7 +334,8 @@ def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
 
 
 def download_ftp_dir(base_url: str, dest_dir: str, *, retries: int = DEFAULT_RETRIES,
-                     timeout: int = DEFAULT_TIMEOUT) -> None:
+                     timeout: int = DEFAULT_TIMEOUT,
+                     progress: Callable[[int], None] | None = None) -> None:
     """
     Recursively download an FTP directory tree, mirroring ``wget -r -np -nH`` behavior.
 
@@ -329,6 +346,7 @@ def download_ftp_dir(base_url: str, dest_dir: str, *, retries: int = DEFAULT_RET
     :param dest_dir: The local directory under which the tree is recreated.
     :param retries: The number of connection attempts before giving up.
     :param timeout: The connection timeout in seconds.
+    :param progress: Optional callback invoked with the byte length of each downloaded block.
     :raises DownloadError: If the directory cannot be listed or downloaded.
     """
     base_url = _normalize_url(base_url)
@@ -343,7 +361,7 @@ def download_ftp_dir(base_url: str, dest_dir: str, *, retries: int = DEFAULT_RET
         try:
             ftp = _ftp_connect(host, timeout)
             try:
-                _recursive_ftp_download(ftp, remote_dir, local_root)
+                _recursive_ftp_download(ftp, remote_dir, local_root, progress=progress)
             finally:
                 _quietly_quit(ftp)
             return
@@ -352,23 +370,26 @@ def download_ftp_dir(base_url: str, dest_dir: str, *, retries: int = DEFAULT_RET
     raise DownloadError(f'FTP directory download failed for {base_url}: {last_err}')
 
 
-def _recursive_ftp_download(ftp: FTP, remote_dir: str, local_dir: str) -> None:
+def _recursive_ftp_download(ftp: FTP, remote_dir: str, local_dir: str,
+                            progress: Callable[[int], None] | None = None) -> None:
     """
     Walk ``remote_dir`` on an open FTP connection, downloading every file into ``local_dir``.
 
     :param ftp: An open, logged-in FTP connection.
     :param remote_dir: The remote directory path to walk.
     :param local_dir: The local directory that mirrors ``remote_dir``.
+    :param progress: Optional callback invoked with the byte length of each downloaded block.
     """
     os.makedirs(local_dir, exist_ok=True)
     for name, kind in _ftp_list(ftp, remote_dir):
         remote_path = f'{remote_dir}/{name}'
         local_path = os.path.join(local_dir, name)
         if kind == 'dir':
-            _recursive_ftp_download(ftp, remote_path, local_path)
+            _recursive_ftp_download(ftp, remote_path, local_path, progress=progress)
         else:
             with open(local_path, 'wb') as fh:
-                ftp.retrbinary(f'RETR {remote_path}', fh.write, blocksize=_CHUNK_SIZE)
+                ftp.retrbinary(f'RETR {remote_path}', _writer_with_progress(fh, progress),
+                               blocksize=_CHUNK_SIZE)
 
 
 def _ftp_list(ftp: FTP, remote_dir: str) -> list[tuple[str, str]]:
