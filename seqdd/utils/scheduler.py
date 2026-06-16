@@ -3,13 +3,38 @@ from __future__ import annotations
 from collections.abc import Iterable, Callable
 import abc
 import logging
+import multiprocessing as mp
 from os import path
 import sys
 from threading import Thread
-from multiprocessing import Process, Event
+from multiprocessing import Event
 import subprocess
 import time
 from typing import Any
+
+
+def _process_context() -> mp.context.BaseContext:
+    """
+    Return a multiprocessing context that does not ``fork`` from this (multi-threaded) process.
+
+    ``JobManager`` runs in a thread, so the default ``fork`` start method on Linux forks from a
+    multi-threaded process: a child could deadlock on a lock held by another thread (e.g. the
+    ``logging`` lock) at fork time, and Python 3.12+ warns about exactly this. ``forkserver``
+    (preferred) forks clean children from a single-threaded server; ``spawn`` (Windows, or fallback)
+    starts fresh interpreters. Both require picklable targets, which :class:`FunctionJob` already
+    guarantees, so this is safe and removes both the warning and the latent deadlock.
+
+    :return: A non-fork multiprocessing context.
+    """
+    available = mp.get_all_start_methods()
+    for method in ('forkserver', 'spawn'):
+        if method in available:
+            return mp.get_context(method)
+    return mp.get_context()
+
+
+# Chosen once: the context used to run every FunctionJob subprocess.
+_MP_CONTEXT = _process_context()
 
 
 class JobManager(Thread):
@@ -298,9 +323,10 @@ class FunctionJob(Job):
 
         The process targets the module-level :func:`_run_function_job` with only picklable
         arguments, so nothing referencing this job (locks, the process itself, lambdas) is sent to
-        the child. This keeps the job working under the ``spawn`` start method (Windows/macOS).
+        the child. It runs under a non-fork context (:data:`_MP_CONTEXT`), which keeps the job
+        working on every platform and avoids forking from the multi-threaded JobManager.
         """
-        self.process = Process(target=_run_function_job, args=(self.to_run, self.args, self.log_file))
+        self.process = _MP_CONTEXT.Process(target=_run_function_job, args=(self.to_run, self.args, self.log_file))
         self.process.start()
 
 
