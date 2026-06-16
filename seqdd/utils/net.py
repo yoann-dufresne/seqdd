@@ -17,6 +17,7 @@ import gzip
 import os
 import shutil
 import socket
+from collections.abc import Callable
 from ftplib import FTP, all_errors as ftp_errors
 from urllib.parse import urlsplit
 
@@ -161,7 +162,7 @@ def http_head_headers(url: str, *, timeout: int = DEFAULT_TIMEOUT,
 
 
 def download_file(url: str, dest: str, *, resume: bool = True, retries: int = DEFAULT_RETRIES,
-                  timeout: int = DEFAULT_TIMEOUT) -> None:
+                  timeout: int = DEFAULT_TIMEOUT, progress: Callable[[int], None] | None = None) -> None:
     """
     Download ``url`` to ``dest``, dispatching on the URL scheme (http/https vs ftp).
 
@@ -174,17 +175,20 @@ def download_file(url: str, dest: str, *, resume: bool = True, retries: int = DE
     :param resume: Whether to resume a partially downloaded file.
     :param retries: The number of retries on transient network errors.
     :param timeout: The per-request timeout in seconds.
+    :param progress: Optional callback invoked with the byte length of each freshly written chunk,
+                     used to report live download progress; ``None`` disables reporting.
     :raises DownloadError: If the download fails after all retries.
     """
     url = _normalize_url(url)
     scheme = urlsplit(url).scheme
     if scheme == 'ftp':
-        _download_ftp(url, dest, retries=retries, timeout=timeout)
+        _download_ftp(url, dest, retries=retries, timeout=timeout, progress=progress)
     else:
-        _download_http(url, dest, resume=resume, retries=retries, timeout=timeout)
+        _download_http(url, dest, resume=resume, retries=retries, timeout=timeout, progress=progress)
 
 
-def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: int) -> None:
+def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: int,
+                   progress: Callable[[int], None] | None = None) -> None:
     """
     Download an http(s) URL to ``dest`` with streaming and Range-based resume.
 
@@ -229,6 +233,8 @@ def _download_http(url: str, dest: str, *, resume: bool, retries: int, timeout: 
                         for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
                             if chunk:
                                 fh.write(chunk)
+                                if progress is not None:
+                                    progress(len(chunk))
             return
         except requests.RequestException as err:
             # Mid-stream drop (or connection error): retry and resume, unless resume is disabled.
@@ -277,7 +283,8 @@ def _ftp_connect(host: str, timeout: int) -> FTP:
         raise DownloadError(f'FTP connection to {host} failed: {err}') from err
 
 
-def _download_ftp(url: str, dest: str, *, retries: int, timeout: int) -> None:
+def _download_ftp(url: str, dest: str, *, retries: int, timeout: int,
+                  progress: Callable[[int], None] | None = None) -> None:
     """
     Download a single file from an ``ftp://`` URL to ``dest``.
 
@@ -297,7 +304,11 @@ def _download_ftp(url: str, dest: str, *, retries: int, timeout: int) -> None:
             ftp = _ftp_connect(host, timeout)
             try:
                 with open(dest, 'wb') as fh:
-                    ftp.retrbinary(f'RETR {remote_path}', fh.write, blocksize=_CHUNK_SIZE)
+                    def _sink(chunk: bytes) -> None:
+                        fh.write(chunk)
+                        if progress is not None:
+                            progress(len(chunk))
+                    ftp.retrbinary(f'RETR {remote_path}', _sink, blocksize=_CHUNK_SIZE)
             finally:
                 _quietly_quit(ftp)
             return
