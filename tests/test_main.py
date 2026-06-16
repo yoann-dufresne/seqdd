@@ -1,11 +1,13 @@
 import logging
 import os
+import sys
 import tempfile
 from argparse import Namespace
+from unittest import mock
 
 import json
 
-from seqdd.__main__ import on_export, on_list, on_remove, on_status, on_verify
+from seqdd.__main__ import on_export, on_list, on_remove, on_status, on_verify, parse_cmd
 from seqdd.register.reg_manager import Register, create_register
 from seqdd.utils.manifest import build_manifest, write_manifest
 from tests import SeqddTest
@@ -45,6 +47,32 @@ class TestOnList(SeqddTest):
         self.assertIn('SRR000001', output)
         self.assertIn('SRR000002', output)
         self.assertNotIn('ERR000003', output)
+
+
+class TestAccessionArgParsing(SeqddTest):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.logger = logging.getLogger('seqdd')
+
+    def _parse(self, argv):
+        with mock.patch.object(sys, 'argv', ['seqdd', *argv]):
+            return parse_cmd(self.logger)
+
+    def test_add_repeated_accession_flags_accumulate(self):
+        # Regression: `add -a X -a Y` must register BOTH accessions, not just the last one.
+        args = self._parse(['add', '-t', 'sequences', '-a', 'U00096.3', '-a', 'MN908947'])
+        self.assertCountEqual(args.accessions, ['U00096.3', 'MN908947'])
+
+    def test_add_single_flag_with_several_values(self):
+        # `add -a X Y` (one flag, several values) must keep working too.
+        args = self._parse(['add', '-t', 'sequences', '-a', 'U00096.3', 'MN908947'])
+        self.assertCountEqual(args.accessions, ['U00096.3', 'MN908947'])
+
+    def test_remove_repeated_accession_flags_accumulate(self):
+        # Same fix on `remove`, which shares the multi-accession option.
+        args = self._parse(['remove', '-a', 'SRR000001', '-a', 'SRR000002'])
+        self.assertCountEqual(args.accessions, ['SRR000001', 'SRR000002'])
 
 
 class TestOnRemove(SeqddTest):

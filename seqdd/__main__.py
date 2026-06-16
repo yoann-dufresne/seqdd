@@ -67,8 +67,10 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                      required=True)
     add.add_argument('-a', '--accessions',
                      nargs='+',
+                     action='extend',
                      default=[],
-                     help='List of accessions to register')
+                     help='List of accessions to register. May be repeated (-a X -a Y) and/or '
+                          'take several values (-a X Y); all are accumulated.')
     add.add_argument('-f', '--file-of-accessions',
                      default="",
                      help='A file containing accessions to download, 1 per line')
@@ -144,8 +146,10 @@ def parse_cmd(logger: logging.Logger) -> argparse.Namespace:
                         help='Delete only from the given type. If not specified, removed from all the types.')
     remove.add_argument('-a', '--accessions',
                         nargs='+',
-                        help='List of accessions to remove from the register. '
-                             'Each accession can be a regular expression.')
+                        action='extend',
+                        default=[],
+                        help='List of accessions to remove from the register. May be repeated '
+                             '(-a X -a Y) and/or take several values. Each can be a regular expression.')
 
     # Verify downloaded data against the provenance manifest
     verify = subparsers.add_parser('verify',
