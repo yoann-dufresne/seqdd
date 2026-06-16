@@ -5,6 +5,7 @@ import time
 
 from seqdd.utils.scheduler import JobManager
 from seqdd.utils.manifest import write_manifest, MANIFEST_NAME
+from seqdd.utils.progress import ProgressBar
 from ..register.reg_manager import Register
 from ..register.datatype_manager import DataTypeManager
 
@@ -89,14 +90,23 @@ class DownloadManager:
                     idxs[source] += 1
                     remaining_to_add -= 1
 
-        # Wait for all jobs to complete, reporting progress as the queue drains
+        # Wait for all jobs to complete, reporting progress as the queue drains.
+        # On an interactive terminal, draw a live one-line job-count bar; otherwise (CI, pipes,
+        # log files) keep emitting a plain log line whenever the count changes, with no
+        # carriage-return spam.
+        progress = ProgressBar(n_jobs)
         last_remaining = None
         while manager.remaining_jobs() > 0:
             remaining = manager.remaining_jobs()
-            if remaining != last_remaining:
-                self.logger.info(f'Progress: {n_jobs - remaining}/{n_jobs} job(s) finished')
+            done = n_jobs - remaining
+            failed = len(manager.failed_jobs) + len(manager.canceled_jobs)
+            if progress.active:
+                progress.update(done, failed)
+            elif remaining != last_remaining:
+                self.logger.info(f'Progress: {done}/{n_jobs} job(s) finished')
                 last_remaining = remaining
-            time.sleep(1)
+            time.sleep(0.25 if progress.active else 1)
+        progress.close(n_jobs, len(manager.failed_jobs) + len(manager.canceled_jobs))
 
         # Stop and join the JobManager
         manager.stop()
