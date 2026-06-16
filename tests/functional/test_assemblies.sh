@@ -26,7 +26,7 @@ if [[ ! -s "$out" ]]; then
     exit 1
 fi
 gzip -t "$out"
-if [[ "$(zcat "$out" | head -c1)" != ">" ]]; then
+if [[ "$(gzip -dc "$out" | head -c1)" != ">" ]]; then
     echo "❌ Downloaded file is not FASTA: $out" >&2
     exit 1
 fi
